@@ -96,6 +96,11 @@ UI_FR = {
     "Custo da atualização em curso": "Coût de la mise à jour en cours",
     "Última atualização": "Dernière mise à jour",
     "Recolher / mostrar": "Replier / déplier", "Preparação": "Préparation", "Atividade": "Activité",
+    "Agente único": "Agent unique", "econômico": "économique",
+    "Um só agente faz todo o trabalho, sem nenhum subagente. Fatura menor; análise mais longa.":
+        "Un seul agent fait tout le travail, sans aucun sous-agent. Facture plus basse ; analyse plus longue.",
+    "O agente reflete": "L'agent réfléchit", "O agente redige": "L'agent rédige", "Redigindo": "Rédaction de",
+    "Preparando": "Prépare", "caracteres": "caractères",
     "Modo de trabalho": "Mode de travail", "Agente livre": "Agent libre", "Multiagentes": "Multi-agents", "versão beta": "version bêta",
     "O agente decide sozinho se reparte o trabalho entre subagentes, e quantos. Comportamento comprovado.":
         "L'agent décide seul s'il répartit le travail entre des sous-agents, et combien. Comportement éprouvé.",

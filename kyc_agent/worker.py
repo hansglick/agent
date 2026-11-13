@@ -126,6 +126,7 @@ GRACA_S = 20              # tour principal fini, plus rien ne tourne : délai po
 SILENCIO_MAX_S = 45 * 60  # sous-agents en arrière-plan sans aucune nouvelle pendant 45 min : erreur explicite
 MAX_RELANCES = 10         # relances de l'agent principal après la fin de ses sous-agents
 MAX_RELANCES_VERSAO = 2   # relances de l'agent principal qui rend la main sans avoir écrit la version
+REDACAO_S = 2             # rédaction en cours (caractères émis) : status.json réécrit au plus toutes les 2 s
 
 
 def agora() -> str:
@@ -140,6 +141,7 @@ class Registro:
         self.st = {"estado": "em_curso", "inicio": agora(), "atualizado_em": agora(), "vivo_em": agora(), "pid": os.getpid(),
                    "modelo": MODEL, "uso": dict.fromkeys(CAMPOS, 0), "tarefa": "", **base}
         self.dono_reversao = False
+        self._redacao_t = 0.0
         self.journal = Journal(run_dir)
         self._salvar()
 
@@ -195,7 +197,20 @@ class Registro:
         self.st["atualizado_em"] = agora()
         self._salvar()
 
+    def redacao(self, info: dict | None):
+        """Ce que l'agent est en train d'écrire (texte, réflexion, contenu d'un outil comme un script), caractère par caractère,
+        avant que le bloc complet n'arrive : seul signe d'activité pendant une longue rédaction (journal et tokens figés)."""
+        if info is None:
+            if self.st.pop("redacao", None) is not None:
+                self._salvar()
+            return
+        self.st["redacao"] = info
+        if time.time() - self._redacao_t >= REDACAO_S:
+            self._redacao_t = time.time()
+            self._salvar()
+
     def fim(self, estado: str, **extra):
+        self.st.pop("redacao", None)
         self.st.update(estado=estado, fim=agora(), atualizado_em=agora(), **extra)
         self.st["duracao_s"] = duracao_total(self.st)
         self.st["duracao_execucao_s"] = duracao_execucao(self.st)
@@ -325,10 +340,14 @@ async def simular(reg: Registro, ped: dict, vnext: int):
         uso["in"] += 300
         uso["out"] += 900
         reg.uso(dict(uso))
-        for _ in range(int(float(os.environ.get("KYC_AGENT_SIM_PASSO", "2.5")) * 10)):
+        desde = agora()
+        for k in range(int(float(os.environ.get("KYC_AGENT_SIM_PASSO", "2.5")) * 10)):
             if parada_pedida(reg.dir):
                 raise Parado("Simulation arrêtée par l'utilisateur.")
+            if "Rédaction" in e:
+                reg.redacao({"tipo": "tool_use", "ferramenta": "Write", "alvo": f"ciclo_v{vnext}.py", "car": 180 * (k + 1), "desde": desde})
             await asyncio.sleep(0.1)
+        reg.redacao(None)
     reg.plano([{"content": x, "status": "completed"} for x in etapas])
     ag.fechar()
     reg.log("[SIMULATION] Terminé — aucun appel à l'API, aucune version créée, dossier inchangé.")
@@ -339,7 +358,7 @@ async def simular(reg: Registro, ped: dict, vnext: int):
 # ------------------------------------------------------------------ exécution réelle (Claude Agent SDK)
 async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int, vnext: int):
     from claude_agent_sdk import (AgentDefinition, AssistantMessage, ClaudeAgentOptions, ClaudeSDKClient,
-                                  PermissionResultAllow, PermissionResultDeny, ResultMessage, TaskNotificationMessage,
+                                  PermissionResultAllow, PermissionResultDeny, ResultMessage, StreamEvent, TaskNotificationMessage,
                                   TaskStartedMessage, TaskUpdatedMessage, TextBlock, ThinkingBlock, ToolResultBlock,
                                   ToolUseBlock, UserMessage)
 
@@ -357,7 +376,15 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
     sistema += "\n\n" + texto_guia()
 
     permissao = restringir_subagentes(criar_permissao(case, vn, reg, ag), modo, reg)
-    if modo == MODO_MULTI:
+    bloqueadas = []
+    if modo == MODO_UNICO:  # économique : un seul agent, aucun sous-agent (outil retiré du moteur et refusé par le contrôle)
+        agents, bloqueadas = None, sorted(OUTILS_SUBAGENTE)
+        multi = ("MODE AGENT UNIQUE : tu fais tout le travail SEUL, sans aucun sous-agent (les outils Agent/Task ne te sont pas "
+                 "disponibles). Lis les pièces, fais le screening et les vérifications toi-même, l'un après l'autre. Pour limiter le "
+                 "coût : ne relis pas une pièce déjà lue (prends des notes dans work/), extrais le texte avant de regarder les images, "
+                 "et ne regarde une page en image que si le texte manque ou est douteux. La rigueur reste la même : aucun contrôle "
+                 "sauté pour aller plus vite.\n")
+    elif modo == MODO_MULTI:
         agents = definir_subagentes(sistema, rel, AgentDefinition)
         multi = (PROMPTS / "multi_agentes.md").read_text(encoding="utf-8").replace("{max}", str(MAX_SUBAGENTES)) + "\n"
     else:  # agent libre : comportement d'origine, l'agent décide seul s'il lance des sous-agents
@@ -389,12 +416,13 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
     opts = ClaudeAgentOptions(
         system_prompt={"type": "file", "path": str(arq_sistema)},
         model=MODEL, cwd=str(ROOT), setting_sources=[], can_use_tool=permissao, agents=agents,
-        allowed_tools=sorted(LIVRES), max_budget_usd=float(os.environ["KYC_AGENT_MAX_USD"]) if os.environ.get("KYC_AGENT_MAX_USD") else None,
+        allowed_tools=sorted(LIVRES), disallowed_tools=bloqueadas, max_budget_usd=float(os.environ["KYC_AGENT_MAX_USD"]) if os.environ.get("KYC_AGENT_MAX_USD") else None,
         # CLAUDE_CODE_ENABLE_TODO_TOOLS : sans lui, le moteur ne donne à l'agent aucun outil de plan (pas de progression en %)
         env={"PYTHONIOENCODING": "utf-8", "ANTHROPIC_API_KEY": chave_api(), "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true"},
         stderr=lambda s: _anexar(run_dir / "agent_stderr.log", s),
         # une page scannée lue comme image arrive en base64 dans un seul message : la limite par défaut (1 Mo) est trop basse
-        max_buffer_size=TAMPAO_MENSAGEM, session_id=reg.st.get("sessao"))
+        max_buffer_size=TAMPAO_MENSAGEM, session_id=reg.st.get("sessao"),
+        include_partial_messages=True)  # flux caractère par caractère : affiche la rédaction en cours (longs scripts, rapports)
     if ped.get("reconsultas"):
         linhas = "\n".join(f"- {', '.join(e['sites'])} ({e['ferramenta']}, {e['em']}) : {e['trecho'][:300]}" for e in ped["reconsultas"])
         prompt += ("\n\nCONSULTATIONS À REFAIRE : lors d'une exécution précédente, ces envois de données ont été refusés car le site "
@@ -472,6 +500,10 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
             async def bomba():  # traite chaque message dans l'ordre, dès son arrivée
                 try:
                     async for m in client.receive_messages():
+                        if isinstance(m, StreamEvent):
+                            rascunho(m)
+                            novo.set()  # signe d'activité (délai de silence des sous-agents)
+                            continue
                         seg["seq"] += 1
                         antes = pendentes()
                         tratar(m)
@@ -525,9 +557,43 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
                 await asyncio.gather(tb, return_exceptions=True)
 
     plano_criar, plano_tarefas = {}, {}  # TaskCreate en attente de son numéro ; tâches du plan par numéro
+    redacoes = {}  # bloc en cours d'écriture, par agent (None = agent principal)
+
+    def publicar_redacao():
+        if not redacoes:
+            reg.redacao(None)
+            return
+        chave = None if None in redacoes else max(redacoes, key=lambda k: redacoes[k]["car"])
+        r = redacoes[chave]
+        reg.redacao({k: r[k] for k in ("tipo", "ferramenta", "alvo", "car", "desde") if r.get(k) is not None}
+                    | ({"agente": quem(chave)} if chave else {}))
+
+    def rascunho(m):
+        """Évènement brut du flux de l'API : compte les caractères du bloc en cours (texte, réflexion, entrée d'outil)."""
+        ev, chave = m.event or {}, m.parent_tool_use_id
+        tp = ev.get("type")
+        if tp == "content_block_start":
+            cb = ev.get("content_block") or {}
+            redacoes[chave] = {"tipo": cb.get("type"), "ferramenta": cb.get("name"), "car": 0, "desde": agora(), "_json": ""}
+        elif tp == "content_block_delta" and chave in redacoes:
+            d, r = ev.get("delta") or {}, redacoes[chave]
+            pedaco = d.get("text") or d.get("thinking") or d.get("partial_json") or ""
+            r["car"] += len(pedaco)
+            if d.get("type") == "input_json_delta" and "alvo" not in r and len(r["_json"]) < 4000:
+                r["_json"] += pedaco  # nom du fichier écrit (ou mission du sous-agent), dès qu'il apparaît
+                a = re.search(r'"(?:file_path|notebook_path|description|subject)"\s*:\s*"((?:[^"\\]|\\.){1,300})"', r["_json"])
+                if a:
+                    r["alvo"] = a.group(1).replace("\\\\", "/").replace("\\", "/").rsplit("/", 1)[-1][:120]
+        elif tp in ("content_block_stop", "message_stop"):
+            redacoes.pop(chave, None)
+        else:
+            return
+        publicar_redacao()
 
     def tratar(m):
         nonlocal uso, resultado
+        if isinstance(m, AssistantMessage) and redacoes.pop(m.parent_tool_use_id, None) is not None:
+            publicar_redacao()  # le bloc complet est arrivé
         if isinstance(m, AssistantMessage) and m.parent_tool_use_id is None:
             seg["ocioso"] = False
             notifs.clear()  # l'agent principal a repris : il a reçu les résultats
@@ -928,8 +994,8 @@ def lancado_em_fundo(b, ag: "Agentes") -> bool:
     return "async agent launched" in t or "resuming agent" in t or "resumedagentid" in t
 
 
-MODO_AGENTE, MODO_MULTI = "agente", "multi"
-MODOS = (MODO_AGENTE, MODO_MULTI)
+MODO_AGENTE, MODO_MULTI, MODO_UNICO = "agente", "multi", "unico"
+MODOS = (MODO_AGENTE, MODO_MULTI, MODO_UNICO)
 
 # sous-agents spécialisés du mode multi-agents : chacun reçoit les règles, la méthode (principe de prudence) et le guide
 SUBAGENTES = {
@@ -979,10 +1045,15 @@ def definir_subagentes(sistema: str, rel: str, AgentDefinition) -> dict:
 
 def restringir_subagentes(permissao, modo: str, reg: "Registro"):
     """Agent libre : aucune restriction (comportement d'origine). Multi-agents : seulement les sous-agents spécialisés
-    (qui ont le guide) — pas le sous-agent générique du moteur, qui n'a ni le guide ni la méthode."""
+    (qui ont le guide) — pas le sous-agent générique du moteur, qui n'a ni le guide ni la méthode. Agent unique : aucun."""
     from claude_agent_sdk import PermissionResultDeny
 
     async def p(tool, inp, ctx):
+        if tool in OUTILS_SUBAGENTE and modo == MODO_UNICO:
+            motivo = "Mode agent unique : aucun sous-agent. Fais ce travail toi-même."
+            reg.log(f"Sous-agent refusé : {motivo}")
+            reg.journal.ev("recusa", ferramenta=tool, parametros=inp, motivo=motivo)
+            return PermissionResultDeny(message=motivo)
         if tool in OUTILS_SUBAGENTE and modo == MODO_MULTI:
             tipo = inp.get("subagent_type")
             if tipo not in SUBAGENTES:

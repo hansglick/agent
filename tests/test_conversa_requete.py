@@ -182,3 +182,20 @@ def test_choix_du_mode_au_lancement(cli, caso, monkeypatch):
     cli.post("/c/EX-001/atualizar", data={"modo": "n'importe quoi"})
     rd = sorted((caso / "runs").glob("*_pedido"))[-1]
     assert ler(rd / "pedido.json")["modo"] == "agente"
+
+
+def test_mode_agent_unique_propose_et_texte_de_redaction(cli, caso, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from webapp import app as A
+    monkeypatch.setattr(A, "lancar_worker", lambda cid, rd: None)
+    cli.post("/c/EX-001/requete", data={"texto": "x"})
+    page = cli.get("/c/EX-001/v1/painel").text
+    assert 'name="modo" value="unico"' in page and "Agent unique" in page
+    cli.post("/c/EX-001/atualizar", data={"modo": "unico"})
+    rd = sorted((caso / "runs").glob("*_pedido"))[-1]
+    assert ler(rd / "pedido.json")["modo"] == "unico"
+    desde = (datetime.now(timezone.utc) - timedelta(minutes=4)).isoformat(timespec="seconds")
+    txt = A.texto_redacao({"tipo": "tool_use", "ferramenta": "Write", "alvo": "ciclo_v2.py", "car": 18432, "desde": desde}, "fr")
+    assert txt.startswith("✍ Rédaction de ciclo_v2.py") and "caractères" in txt and "4 min" in txt
+    assert A.texto_redacao({"tipo": "text", "car": 30, "desde": datetime.now(timezone.utc).isoformat()}, "fr") == ""  # bref : rien
+    assert "réfléchit" in A.texto_redacao({"tipo": "thinking", "car": 9000, "desde": desde}, "fr")

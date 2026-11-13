@@ -421,7 +421,7 @@ def run_atual(cid) -> dict | None:
                     continue
         return {"id": rd.name, "tarefa": tarefa or "", "uso": stt.get("uso") or {}, "modelo": stt.get("modelo", "claude-opus-5-5"),
                 "decorrido_s": duracao_total({**stt, "fim": None}),
-                "parada_pedida": (rd / "parar.json").exists(), "plano": stt.get("plano") or {},
+                "parada_pedida": (rd / "parar.json").exists(), "plano": stt.get("plano") or {}, "redacao": stt.get("redacao"),
                 "agentes": stt.get("agentes") or {"ativos": 1, "subagentes": []}}
     return None
 
@@ -455,6 +455,38 @@ def texto_agentes(ag: dict, lang) -> str:
     return f"{n} {t('agentes trabalhando')} (1 {t('principal')} + {n - 1} {t('subagente') if n == 2 else t('subagentes')})"
 
 
+REDACAO_MIN_CAR, REDACAO_MIN_S = 2000, 15  # rédaction affichée seulement si elle dure (sinon la ligne clignoterait à chaque outil)
+
+
+def texto_redacao(r, lang) -> str:
+    """« ✍ Rédaction de ciclo_v1.py · 18 432 caractères · 4 min » pendant qu'un long bloc s'écrit."""
+    if not isinstance(r, dict):
+        return ""
+    t, f = ui(lang), formatadores(lang)
+    try:
+        dur = max(0, int(datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(r["desde"]).timestamp()))
+    except (KeyError, TypeError, ValueError):
+        dur = 0
+    car = int(r.get("car") or 0)
+    if car < REDACAO_MIN_CAR and dur < REDACAO_MIN_S:
+        return ""
+    if r.get("tipo") == "thinking":
+        o = t("O agente reflete")
+    elif r.get("tipo") == "tool_use":
+        alvo = r.get("alvo")
+        o = (f"{t('Redigindo')} {alvo}" if alvo else t("O agente redige")) if r.get("ferramenta") in ESCRITA_UI else \
+            f"{t('Preparando')} {r.get('ferramenta') or '?'}" + (f" ({alvo})" if alvo else "")
+    else:
+        o = t("O agente redige")
+    if r.get("agente"):
+        o += f" [{t('subagente')}]"
+    tempo = f"{dur // 60} min" if dur >= 60 else f"{dur} s"
+    return f"✍ {o} · {f['fmt_int'](car)} {t('caracteres')} · {tempo}"
+
+
+ESCRITA_UI = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+
+
 def estado_agente(cid, lang) -> dict:
     """Matrice « cerveau » : exécution en cours + cumul du projet (versions mesurées + exécution en cours)."""
     f = formatadores(lang)
@@ -477,6 +509,7 @@ def estado_agente(cid, lang) -> dict:
         out.update(progresso=f"{pl['pct']} %" if pl.get("total") else "",
                    progresso_det=(f"{pl['feitas']} / {pl['total']} {t('tarefas do plano do agente')}"
                                   + (f" · {t('em curso')} : {pl['em_curso']}" if pl.get("em_curso") else "")) if pl.get("total") else "")
+        out.update(redacao=texto_redacao(run.get("redacao"), lang))
         out.update(parada_pedida=run["parada_pedida"], agentes=texto_agentes(run["agentes"], lang), tarefa=log_curta(run["tarefa"]), decorrido_s=run["decorrido_s"], run_in=f["fmt_int"](tr["entrada"]), run_out=f["fmt_int"](tr["saida"]), run_usd=f["fmt_usd"](cr))
     tp = totais_uso(uso)
     medido = bool(met["medidas"]) or bool(met["falhas"]) or bool(run) or not versions(cid)  # sans version : rien n'a encore été consommé (0 exact)

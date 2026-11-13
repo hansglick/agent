@@ -15,7 +15,7 @@
   {% if pedido.estado == 'solicitado' %}
   <b>{{ t('Atualização solicitada') }}</b> — {{ fmt_data(pedido.solicitado_em) }} · {{ pedido.total }} {{ t('documentos aguardando tratamento') }}. {{ t('O agente ainda não começou.') }}
   {% elif pedido.estado == 'concluido' %}
-  <b>{{ t('Atualização concluída') }}</b> — v{{ ps.versao_produzida }} · {{ fmt_data(ps.fim) }}{% if pedido.modo == 'multi' %} · {{ t('Multiagentes') }} ({{ t('versão beta') }}){% elif pedido.modo == 'agente' %} · {{ t('Agente livre') }}{% endif %}{% if ps.custo_usd is not none %} · {{ fmt_usd(ps.custo_usd) }}{% endif %}. {{ t('Releia e valide a nova versão antes de qualquer envio.') }}
+  <b>{{ t('Atualização concluída') }}</b> — v{{ ps.versao_produzida }} · {{ fmt_data(ps.fim) }}{% if pedido.modo == 'multi' %} · {{ t('Multiagentes') }} ({{ t('versão beta') }}){% elif pedido.modo == 'agente' %} · {{ t('Agente livre') }}{% elif pedido.modo == 'unico' %} · {{ t('Agente único') }}{% endif %}{% if ps.custo_usd is not none %} · {{ fmt_usd(ps.custo_usd) }}{% endif %}. {{ t('Releia e valide a nova versão antes de qualquer envio.') }}
   {% if ps.resumo %}<details><summary>{{ t('Resumo do agente') }}</summary><div class="small" style="white-space:pre-wrap">{{ ps.resumo }}</div></details>{% endif %}
   {% elif pedido.estado == 'parado' %}
   <b>{{ t('Atualização interrompida') }}</b> — {{ fmt_data(ps.fim) }}. {% if ps.revertido %}{{ t('O dossiê foi restaurado no estado anterior à execução; os documentos continuam aguardando tratamento.') }}{% else %}{{ t('Nada foi alterado; os documentos continuam aguardando tratamento.') }}{% endif %}
@@ -185,7 +185,7 @@
         <a class="brain-journal" href="/c/{{ cid }}/journal" id="brain-journal" title="{{ t('Diário completo do agente') }}" aria-label="{{ t('Diário completo do agente') }}">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2z"/><path d="M5 19a2 2 0 0 1 2-2h12"/><path d="M9 7h6M9 11h6"/></svg></a>
-        <span class="brain-task" id="brain-task" aria-live="polite">{{ A.tarefa if A.ativo else (t('Demonstração da animação — nenhuma atualização real em curso') if DEMO else t('Nenhuma atualização em curso')) }}</span>
+        <span class="brain-task" id="brain-task" aria-live="polite">{{ (A.redacao or A.tarefa) if A.ativo else (t('Demonstração da animação — nenhuma atualização real em curso') if DEMO else t('Nenhuma atualização em curso')) }}</span>
       </span>
       <span class="brain-tok" id="brain-tok">
         <span>{{ t('Entrada') }} <b id="run-in">{{ A.run_in if A.ativo else '—' }}</b></span>
@@ -242,6 +242,8 @@
         <span>{{ t('O agente decide sozinho se reparte o trabalho entre subagentes, e quantos. Comportamento comprovado.') }}</span></label>
       <label><input type="radio" name="modo" value="multi"> <b>{{ t('Multiagentes') }}</b> <i class="beta">{{ t('versão beta') }}</i>
         <span>{{ t('O agente principal reparte leitura das peças, screening por parte e verificações de autenticidade entre subagentes especializados em paralelo, depois consolida. Mais rápido; custo um pouco maior.') }}</span></label>
+      <label><input type="radio" name="modo" value="unico"> <b>{{ t('Agente único') }}</b> <i class="beta">{{ t('econômico') }}</i>
+        <span>{{ t('Um só agente faz todo o trabalho, sem nenhum subagente. Fatura menor; análise mais longa.') }}</span></label>
     </fieldset>
     <div class="row" style="justify-content:flex-end;margin-top:14px">
       <button class="btn alt" type="button" onclick="this.closest('dialog').close()">Cancel</button>
@@ -434,7 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const r = await (await fetch(url, {cache: 'no-store'})).json();
       $('brain-tile').classList.toggle('is-on', r.ativo); $('brain-tile').classList.toggle('is-off', !r.ativo);
-      $('brain-task').textContent = r.ativo ? (r.tarefa || '…') : NADA;
+      $('brain-task').textContent = r.ativo ? (r.redacao || r.tarefa || '…') : NADA;  // longue rédaction : caractères émis
       $('brain-agents').textContent = r.ativo ? (r.agentes || '') : '';
       $('brain-pct').textContent = r.ativo ? (r.progresso || '') : ''; $('brain-pct').title = r.ativo ? (r.progresso_det || '') : '';
       $('btn-parar').hidden = !r.ativo; $('btn-parar').disabled = !!r.parada_pedida;

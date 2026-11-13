@@ -668,3 +668,58 @@ def test_plan_de_l_agent_chef_par_taskcreate_taskupdate(caso, modo_real, monkeyp
     assert (vus[0]["total"], vus[0]["feitas"], vus[0]["pct"], vus[0]["revisoes"]) == (4, 0, 0, 0)
     assert (vus[1]["total"], vus[1]["feitas"], vus[1]["pct"], vus[1]["em_curso"]) == (3, 1, 33, "Screening en cours")
     assert ler(rd / "status.json")["estado"] == "concluido"
+
+
+def ev(tipo, parent=None, **k):
+    return sdk.StreamEvent(uuid="u", session_id="s", event={"type": tipo, **k}, parent_tool_use_id=parent)
+
+
+def test_redaction_en_cours_compte_les_caracteres(caso, modo_real, monkeypatch):
+    """Long script écrit par l'agent : journal et tokens figés, mais le nombre de caractères émis défile (status.json)."""
+    rd, _, _ = adicionar_pendentes(caso)
+    monkeypatch.setattr(worker, "REDACAO_S", 0)
+    vus = []
+
+    async def roteiro(cli):
+        assert cli.o.include_partial_messages is True
+        yield ev("message_start", message={})
+        yield ev("content_block_start", index=0, content_block={"type": "tool_use", "id": "w1", "name": "Write", "input": {}})
+        yield ev("content_block_delta", index=0, delta={"type": "input_json_delta", "partial_json": '{"file_path": "C:\\x\\work\\ciclo'})
+        yield ev("content_block_delta", index=0, delta={"type": "input_json_delta", "partial_json": '_v2.py", "content": "' + "a" * 5000})
+        vus.append(dict(ler(rd / "status.json")["redacao"]))
+        yield ev("content_block_stop", index=0)
+        vus.append(ler(rd / "status.json").get("redacao"))
+        yield ev("content_block_start", index=0, content_block={"type": "thinking", "thinking": ""})
+        yield ev("content_block_delta", index=0, delta={"type": "thinking_delta", "thinking": "hmm" * 10})
+        yield sdk.AssistantMessage(content=[sdk.TextBlock("ok")], model="m", usage=USO, message_id="m1")
+        vus.append(ler(rd / "status.json").get("redacao"))
+        produzir_v2(caso)
+        yield result_ok()
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", cliente_falso(roteiro))
+    worker.main(str(caso), str(rd))
+    assert vus[0]["tipo"] == "tool_use" and vus[0]["ferramenta"] == "Write" and vus[0]["alvo"] == "ciclo_v2.py"
+    assert vus[0]["car"] > 5000 and vus[1] is None and vus[2] is None
+    st = ler(rd / "status.json")
+    assert st["estado"] == "concluido" and "redacao" not in st
+    assert not any("stream" in json.dumps(x) for x in map(json.loads, (rd / "log.jsonl").read_text(encoding="utf-8").splitlines()))
+
+
+def test_mode_agent_unique_sans_sous_agent(caso, modo_real, monkeypatch):
+    rd, _, _ = adicionar_pendentes(caso)
+    ped = ler(rd / "pedido.json")
+    ped["modo"] = "unico"
+    (rd / "pedido.json").write_text(json.dumps(ped), encoding="utf-8")
+
+    async def roteiro(cli):
+        assert not cli.o.agents and {"Agent", "Task"} <= set(cli.o.disallowed_tools) and "AGENT UNIQUE" in cli.prompt
+        for nome in ("Agent", "Task"):
+            r = await cli.o.can_use_tool(nome, {"description": "lot", "subagent_type": "analista-kyc"}, SimpleNamespace(tool_use_id="x"))
+            assert isinstance(r, sdk.PermissionResultDeny)
+        produzir_v2(caso)
+        yield result_ok()
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", cliente_falso(roteiro))
+    worker.main(str(caso), str(rd))
+    assert ler(rd / "status.json")["estado"] == "concluido"
+    assert ler(caso / "versions" / "v2" / "metricas.json")["modo"] == "unico"
