@@ -640,3 +640,31 @@ def test_mode_multi_agents_sous_agents_specialises(caso, modo_real, monkeypatch)
     assert "MODE MULTI-AGENTS" in vu["prompt"] and "work/lots/" in vu["prompt"] and "{max}" not in vu["prompt"]
     assert len(ligne_de_commande(vu["opts"])) < 30_000  # les définitions passent par l'initialisation, pas la ligne de commande
     assert ler(caso / "versions" / "v2" / "metricas.json")["modo"] == "multi"
+
+
+def test_plan_de_l_agent_chef_par_taskcreate_taskupdate(caso, modo_real, monkeypatch):
+    """Le moteur récent n'a plus TodoWrite : le plan passe par TaskCreate / TaskUpdate et donne la progression."""
+    rd, _, _ = adicionar_pendentes(caso)
+    vus = []
+
+    async def roteiro(cli):
+        assert cli.o.env.get("CLAUDE_CODE_ENABLE_TODO_TOOLS") == "true" and worker.PLANO <= set(cli.o.allowed_tools)
+        cria = [sdk.ToolUseBlock(id=f"c{i}", name="TaskCreate", input={"subject": s, "description": s, "activeForm": f"{s} en cours"})
+                for i, s in enumerate(("Lire les pièces", "Screening", "Livrables", "Traduction"), 1)]
+        yield sdk.AssistantMessage(content=cria, model="m", usage=USO, message_id="m1")
+        yield sdk.UserMessage(content=[sdk.ToolResultBlock(tool_use_id=f"c{i}", content=f"Task #{i} created successfully: x")
+                                       for i in range(1, 5)])
+        vus.append(dict(ler(rd / "status.json")["plano"]))
+        yield sdk.AssistantMessage(content=[sdk.ToolUseBlock(id="u1", name="TaskUpdate", input={"taskId": "1", "status": "completed"}),
+                                            sdk.ToolUseBlock(id="u2", name="TaskUpdate", input={"taskId": "2", "status": "in_progress"}),
+                                            sdk.ToolUseBlock(id="u3", name="TaskUpdate", input={"taskId": "4", "status": "deleted"})],
+                                   model="m", usage=USO, message_id="m2")
+        vus.append(dict(ler(rd / "status.json")["plano"]))
+        produzir_v2(caso)
+        yield result_ok()
+
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", cliente_falso(roteiro))
+    worker.main(str(caso), str(rd))
+    assert (vus[0]["total"], vus[0]["feitas"], vus[0]["pct"], vus[0]["revisoes"]) == (4, 0, 0, 0)
+    assert (vus[1]["total"], vus[1]["feitas"], vus[1]["pct"], vus[1]["em_curso"]) == (3, 1, 33, "Screening en cours")
+    assert ler(rd / "status.json")["estado"] == "concluido"

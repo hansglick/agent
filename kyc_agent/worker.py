@@ -106,7 +106,8 @@ def registrar_envio_recusado(reg: "Registro", sites: list[str], ferramenta: str,
                 "agente": agente or "principal", "trecho": " ".join(str(trecho).split())[:400]})
     reg._salvar()
 LEITURA_LOCAL = {"Read", "Glob", "Grep", "LS"}           # lecture de fichiers : limitée au périmètre du dossier
-LIVRES = {"WebSearch", "WebFetch", "TodoWrite", "TaskOutput"}  # sans accès aux fichiers locaux
+PLANO = {"TaskCreate", "TaskUpdate", "TaskList", "TaskGet"}  # plan de travail de l'agent (liste de tâches du moteur)
+LIVRES = {"WebSearch", "WebFetch", "TodoWrite", "TaskOutput"} | PLANO  # sans accès aux fichiers locaux
 LEITURA = LEITURA_LOCAL | LIVRES | {"Task", "Agent"}
 # références communes autorisées en lecture, en plus du dossier traité
 REFERENCIAS = ("data/job_guidelines_v2.pdf", "data/job_guidelines.pdf", "data/format_output.txt", "kyc_agent")
@@ -188,7 +189,8 @@ class Registro:
         feitas = sum(1 for t in todos if t.get("status") == "completed")
         atual = next((str(t.get("activeForm") or t.get("content") or "") for t in todos if t.get("status") == "in_progress"), "")
         self.st["plano"] = {"total": total, "feitas": feitas, "pct": round(100 * feitas / total), "em_curso": atual[:200],
-                            "revisoes": (ant.get("revisoes") or 0) + (1 if ant and total > (ant.get("total") or 0) else 0),
+                            "revisoes": (ant.get("revisoes") or 0) + (1 if ant.get("iniciado") and total > (ant.get("total") or 0) else 0),
+                            "iniciado": bool(ant.get("iniciado")) or any(t.get("status") in ("in_progress", "completed") for t in todos),
                             "atualizado_em": agora()}
         self.st["atualizado_em"] = agora()
         self._salvar()
@@ -370,11 +372,11 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
                  f"l'état et les livrables. Pour peu d'éléments, travaille seul.\n")
     multi += ("Sous-agents ou commandes lancés en arrière-plan : tu peux terminer ton tour pour attendre leurs résultats ; "
               "tu seras relancé à leur fin. Ton travail n'est terminé que lorsque la version et ses livrables sont écrits.\n")
-    multi += ("Plan de travail (sert à afficher la progression au compliance) : dès le début, avant toute autre action, établis avec "
-              "l'outil TodoWrite ton plan COMPLET de la mise à jour (environ 15 à 30 tâches concrètes, jusqu'à l'écriture des "
-              "livrables et de la traduction), puis tiens-le à jour tout au long du travail : passe chaque tâche « in_progress » "
-              "quand tu la commences et « completed » dès qu'elle est faite ; ajoute les tâches nouvelles dès que tu les découvres. "
-              "Ne marque jamais « completed » une tâche non faite.\n")
+    multi += ("Plan de travail (sert à afficher la progression au compliance) : dès le début, avant toute autre action, établis "
+              "ton plan COMPLET de la mise à jour avec l'outil TaskCreate (une tâche par appel, environ 15 à 30 tâches concrètes, "
+              "jusqu'à l'écriture des livrables et de la traduction), puis tiens-le à jour tout au long du travail avec TaskUpdate : "
+              "status « in_progress » quand tu commences une tâche, « completed » dès qu'elle est faite ; crée les tâches nouvelles "
+              "dès que tu les découvres. Ne marque jamais « completed » une tâche non faite. Les sous-agents n'utilisent pas ces outils.\n")
 
     modelo_prompt = "atualizacao.md" if vn else "analise_inicial.md"  # même bouton : première analyse ou mise à jour
     prompt = (PROMPTS / modelo_prompt).read_text(encoding="utf-8").format(
@@ -388,7 +390,9 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
         system_prompt={"type": "file", "path": str(arq_sistema)},
         model=MODEL, cwd=str(ROOT), setting_sources=[], can_use_tool=permissao, agents=agents,
         allowed_tools=sorted(LIVRES), max_budget_usd=float(os.environ["KYC_AGENT_MAX_USD"]) if os.environ.get("KYC_AGENT_MAX_USD") else None,
-        env={"PYTHONIOENCODING": "utf-8", "ANTHROPIC_API_KEY": chave_api()}, stderr=lambda s: _anexar(run_dir / "agent_stderr.log", s),
+        # CLAUDE_CODE_ENABLE_TODO_TOOLS : sans lui, le moteur ne donne à l'agent aucun outil de plan (pas de progression en %)
+        env={"PYTHONIOENCODING": "utf-8", "ANTHROPIC_API_KEY": chave_api(), "CLAUDE_CODE_ENABLE_TODO_TOOLS": "true"},
+        stderr=lambda s: _anexar(run_dir / "agent_stderr.log", s),
         # une page scannée lue comme image arrive en base64 dans un seul message : la limite par défaut (1 Mo) est trop basse
         max_buffer_size=TAMPAO_MENSAGEM, session_id=reg.st.get("sessao"))
     if ped.get("reconsultas"):
@@ -520,6 +524,8 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
                 tb.cancel()
                 await asyncio.gather(tb, return_exceptions=True)
 
+    plano_criar, plano_tarefas = {}, {}  # TaskCreate en attente de son numéro ; tâches du plan par numéro
+
     def tratar(m):
         nonlocal uso, resultado
         if isinstance(m, AssistantMessage) and m.parent_tool_use_id is None:
@@ -537,8 +543,20 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
                 quem_m = quem(m.parent_tool_use_id)
                 if isinstance(b, ToolUseBlock):
                     J.ev("ferramenta", agente=quem_m, id=b.id, nome=b.name, parametros=b.input)
-                    if b.name == "TodoWrite" and m.parent_tool_use_id is None:  # plan de l'agent chef → progression
-                        reg.plano(b.input.get("todos"))
+                    if m.parent_tool_use_id is None:  # plan de l'agent chef → progression
+                        if b.name == "TodoWrite":
+                            reg.plano(b.input.get("todos"))
+                        elif b.name == "TaskCreate":
+                            plano_criar[b.id] = b.input
+                        elif b.name == "TaskUpdate":
+                            tid = str(b.input.get("taskId") or b.input.get("task_id") or "").lstrip("#")
+                            t = plano_tarefas.setdefault(tid, {"content": tid, "status": "pending"})
+                            if b.input.get("status") == "deleted":
+                                plano_tarefas.pop(tid, None)
+                            else:
+                                t.update({k: v for k, v in (("status", b.input.get("status")), ("content", b.input.get("subject")),
+                                                            ("activeForm", b.input.get("activeForm"))) if v})
+                            reg.plano(list(plano_tarefas.values()))
                 elif isinstance(b, TextBlock) and b.text.strip():
                     J.ev("texto", agente=quem_m, texto=b.text)
                 elif isinstance(b, ThinkingBlock) and b.thinking.strip():
@@ -571,6 +589,16 @@ async def executar(case: Path, run_dir: Path, reg: Registro, ped: dict, vn: int,
                 fundo_ativos.discard(m.task_id)
         elif isinstance(m, UserMessage) and isinstance(m.content, list):
             for b in m.content:  # résultat de l'outil Agent/Task = fin du sous-agent (filet de sécurité)
+                if isinstance(b, ToolResultBlock) and b.tool_use_id in plano_criar:  # « Task #12 created successfully: … »
+                    inp = plano_criar.pop(b.tool_use_id)
+                    txt = b.content if isinstance(b.content, str) else " ".join(
+                        str(x.get("text", "")) for x in (b.content or []) if isinstance(x, dict))
+                    num = re.search(r"#\s*(\d+)", txt or "")
+                    if num and not b.is_error:
+                        plano_tarefas.setdefault(num.group(1), {}).update(
+                            {"content": inp.get("subject") or num.group(1), "activeForm": inp.get("activeForm") or inp.get("subject"),
+                             "status": plano_tarefas.get(num.group(1), {}).get("status") or "pending"})
+                        reg.plano(list(plano_tarefas.values()))
                 if isinstance(b, ToolResultBlock):
                     # un sous-agent lancé en arrière-plan rend aussitôt « Async agent launched » : il n'est pas fini,
                     # sa fin arrive par TaskNotification / TaskUpdated (sinon le compteur retombait à 1 en 20 ms)
