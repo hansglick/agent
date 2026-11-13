@@ -1,0 +1,8 @@
+openpyxl==3.1.5
+playwright==1.65.0
+pymupdf==2.1
+pymupdf4llm==2.1
+pymupdf_layout==2.1
+reportlab==5.1.0
+requests==2.34.2
+claude-agent-sdk==0.2.180

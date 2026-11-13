@@ -1,0 +1,84 @@
+{
+  "_aviso": "EXEMPLO FICTÍCIO — ilustra a forma e o nível de detalhe esperados de state.json. Nenhuma pessoa, empresa, documento ou operação aqui é real; não reutilizar nenhum conteúdo.",
+  "schema_version": "5",
+  "versao": 1,
+  "data_analise": "2026-01-15",
+  "data_referencia": "2026-01-15",
+  "elaborado_por": "Agente KYC/KYB/AML (IA) — rascunho para revisão do Supervisor de Compliance",
+  "guia_referencia": "Guia unificado KYC/KYB/AML — versão consolidada 1.0 (data/job_guidelines_v2.pdf)",
+  "validacao_humana": {"status": "pendente", "supervisor": null, "data": null, "comentario": null},
+  "execucao_revisao": {"executado_por": "Agente KYC/KYB/AML (IA)", "revisado_por": null, "data_revisao": null, "autorizado_por": null,
+    "data_autorizacao": null, "nota": "Execução, revisão e autorização são registros distintos (guia v2 §2.2).", "autorizacao_pendente": "pendente (Jurídico consultado — M3)"},
+  "caso": {
+    "id": "EX-001", "nome": "AQUISIÇÃO DE GALPÃO LOGÍSTICO EM CIDADE FICTÍCIA/UF", "categoria": "Land (Acquisition)", "etapa_pipeline": "KYC / Compliance",
+    "tipo_entidade": "Pessoa jurídica", "valor_pipeline": "US$ 2.000.000,00", "valor_declarado": "R$ 10.000.000,00 (questionário KYC de 05/01/2026)",
+    "finalidade": "Venda do imóvel (galpão de 5.000 m²)", "prazo_declarado": "90 dias", "bdr": {"nome": "Nome Fictício BDR", "email": "bdr@exemplo.invalid", "time": "Time Exemplo"},
+    "outros_internos": [], "contato_cliente": {"nome": "Contato Fictício", "papel_pipeline": "Diretor", "email": "contato@exemplo.invalid", "telefone": "não informado"},
+    "fechamento_previsto": "2026-04-30", "prioridade": "P2 — pendências que condicionam o KYC", "estado_tarefa": "HOLD — aguardando cliente/BDR",
+    "contraparte": "EMPRESA EXEMPLO LTDA (PJ), vendedora; sócio único FULANO EXEMPLO (PF)",
+    "quem_paga_quem": "Comprador → EMPRESA EXEMPLO LTDA (conta não informada): R$ 10 M pela venda — declaração do cliente.",
+    "periodo_documentos": "recebidos de 02/01/2026 a 14/01/2026"
+  },
+  "recomendacao": {
+    "status": "HOLD KYC / EDD / ESCALAÇÃO", "codigo": "HOLD_KYC_EDD",
+    "resumo": "Identidade do sócio confirmada e screenings sem correspondência; o KYC não pode ser concluído enquanto o beneficiário final declarado não for confirmado por documento societário atualizado.",
+    "justificativa": ["guia v2 §13.1: HOLD quando UBO material não resolvido.", "guia v2 §6.3.4: incerteza material sobre o controle impede conclusão suficiente."],
+    "caminho_para_validacao": "Recebida a ficha cadastral atualizada (P01) e sem novo sinal, o status proposto passa a 'KYC CLEAR - DD OPEN ITEMS'.",
+    "escalonamento": "Sem escalonamento ao CEO nesta etapa."
+  },
+  "partes": [
+    {"id": "EMP", "nome": "EMPRESA EXEMPLO LTDA", "tipo": "PJ", "cnpj": "11.222.333/0001-81", "papeis": ["Vendedora / contraparte"], "vinculo_fonte": "D01 contrato social", "kyc": "KYB completo"},
+    {"id": "FUL", "nome": "FULANO EXEMPLO", "tipo": "PF", "cpf": "529.982.247-25", "nascimento": "01/01/1970", "documento": "RG fictício",
+     "papeis": ["Sócio único (100%) — beneficiário final declarado"], "vinculo_fonte": "D01 contrato social (2019)", "kyc": "KYC completo (UBO)"}
+  ],
+  "documentos": [
+    {"id": "D01", "arquivo": "cases/EX-001/documentos/contrato_social.pdf", "tipo": "Contrato social (alteração 2019)", "origem": "cliente", "recebido_em": "2026-01-02",
+     "uso": "Partes, UBO", "achado": "Sócio único FULANO EXEMPLO; documento de 2019 — atualização não comprovada."}
+  ],
+  "controles": [
+    {"id": "C01", "nivel": "Identidade", "controle": "Reconciliação de identidade do UBO", "partes": "FUL", "estado": "concluído", "execucao": "executado pelo agente",
+     "resultado": "Nome, CPF e nascimento coincidem entre RG e contrato social.", "conclusao": "Identidade confirmada.", "evidencias": ["E02"]},
+    {"id": "C02", "nivel": "Screening", "controle": "OFAC / ONU / PEP / CEIS / CNEP", "partes": "EMP, FUL", "estado": "concluído", "execucao": "executado pelo agente",
+     "resultado": "Nenhuma correspondência identificada.", "conclusao": "Sem impedimento.", "evidencias": ["E03"]},
+    {"id": "C03", "nivel": "Cadastro", "controle": "Situação cadastral na Receita Federal", "partes": "EMP", "estado": "não executado",
+     "execucao": "não consultado – portal protegido por captcha (T1)", "resultado": "—", "conclusao": "Não equivale a resultado negativo.", "evidencias": []}
+  ],
+  "fluxos": [
+    {"id": "F1", "pagador": "Comprador", "recebedor": "EMPRESA EXEMPLO LTDA", "valor": "R$ 10.000.000,00", "motivo": "Preço de venda", "base_contratual": "Proposta (não assinada)", "natureza": "declaração do cliente"}
+  ],
+  "pontos_esclarecidos": [
+    {"id": "PE1", "ponto": "Identidade do sócio", "conclusao": "Confirmada por RG e contrato social.", "natureza": "fato documentado", "evidencias": ["E01", "E02"]}
+  ],
+  "riscos": [
+    {"id": "R1", "titulo": "UBO declarado com base em documento de 2019", "importancia": "média", "bloqueia_kyc": true, "evento": "Possível alteração societária não informada",
+     "parte_fluxo": "EMP / FUL", "fato_fonte": "Fato: último contrato social apresentado é de 2019 (D01). Hipótese: alterações posteriores não apresentadas.",
+     "exposicao": "Beneficiário final incorreto", "medida_executada": "Leitura do contrato social", "medida_proposta": "Ficha cadastral atualizada da Junta Comercial (P01)",
+     "risco_residual": "médio até P01", "ligacao": "P01"}
+  ],
+  "pendencias": [
+    {"id": "P01", "item": "Ficha cadastral atualizada", "parte": "EMP", "elemento_faltante": "Composição societária atual", "risco": "R1",
+     "esperado": "Ficha cadastral simplificada da Junta Comercial emitida há menos de 30 dias.", "criterio_fechamento": "Sócio(s) e participações conferem com o declarado.",
+     "responsavel": "Cliente (via BDR)", "condiciona": "KYC", "etapa_limite": "antes da conclusão do KYC", "prioridade": "P1", "evidencias": ["E01"], "status": "aberta", "estado_tarefa": "aguardando cliente"}
+  ],
+  "mensagens": [
+    {"id": "M1", "destinatario": "BDR", "para": "bdr@exemplo.invalid", "assunto": "EX-001 — documento societário atualizado", "anexos": [], "pendencias": ["P01"],
+     "corpo": "Olá,\n\nPara concluir o KYC da EX-001, precisamos da ficha cadastral simplificada atualizada da EMPRESA EXEMPLO LTDA (emitida há menos de 30 dias).\n\nObrigado,\nCompliance"}
+  ],
+  "registro_tecnico": [
+    {"id": "T1", "controle": "C03 — situação cadastral na Receita Federal", "incidente": "captcha — não contornado", "intervencao": "Compliance humano: consultar o CNPJ no portal e salvar o comprovante.",
+     "impacto": "C03 permanece não executado", "prioridade": "baixa", "evidencias": [],
+     "respostas": [{"id": "upload_comprovante", "rotulo": "Enviar o comprovante", "texto": "opcional", "arquivos": "obrigatorio", "multiplo": false, "aceita": ".pdf,.png,.jpg",
+                    "ajuda": "Comprovante de situação cadastral do CNPJ.", "efeito": "C03 passa a executado."}]}
+  ],
+  "condicoes": {"ja_cumpridas": ["Identidade do UBO confirmada"], "necessarias_ao_kyc": ["P01"], "antes_assinatura_closing": ["Certidões do imóvel (DD)"]},
+  "historico": [
+    {"versao": 1, "data": "2026-01-15", "evento": "Análise inicial", "mudancas": ["Criação do dossiê: 2 partes, 1 documento, 3 controles (1 não executado — captcha), 1 risco, 1 pendência, 1 mensagem."]}
+  ],
+  "evidencias": [
+    {"id": "E01", "categoria": "01_Documentos_cliente", "origem": "cliente", "fonte": "cases/EX-001/documentos/contrato_social.pdf", "arquivo": "EX-001_CONTRATO-SOCIAL_2019.pdf", "descricao": "Contrato social", "sustenta": "C01, R1"},
+    {"id": "E02", "categoria": "02_Identidade_UBO", "origem": "agente", "fonte": "gen:identidade", "arquivo": "(gerado)", "descricao": "Reconciliação de identidade", "sustenta": "C01"},
+    {"id": "E03", "categoria": "03_Screenings", "origem": "agente", "fonte": "gen:screening", "arquivo": "(vários)", "descricao": "Comprovantes de screening por parte e lista", "sustenta": "C02"},
+    {"id": "E04", "categoria": "07_Parecer_e_validacao", "origem": "agente", "fonte": "gen:relatorio", "arquivo": "(gerado)", "descricao": "Relatório KYC", "sustenta": "—"}
+  ],
+  "nota_fr": "# EX-001 — Note pour le superviseur (v1, exemple fictif)\n\n**Recommandation proposée : HOLD KYC / EDD / ESCALAÇÃO.**\n\n- Fait : identité de l'associé confirmée ; screenings sans correspondance.\n- Bloquant : composition sociétaire à confirmer (P01, message M1 à la BDR).\n- Non exécuté : situation cadastrale (captcha, T1) — ce n'est pas un résultat négatif.\n"
+}

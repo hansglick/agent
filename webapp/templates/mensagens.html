@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ s.caso.id }} · {{ t('Mensagens') }}{% endblock %}
+{% block body %}
+{% import "_resposta.html" as R with context %}
+<div class="card warn"><b>{{ t('Rascunhos para revisão.') }}</b> {{ t('Nenhuma mensagem é enviada pela aplicação: Compliance relê, ajusta e envia pelo canal autorizado (guia v2 §2.3, §15.3). O botão «Abrir no e-mail» só prepara o rascunho no seu cliente de e-mail; os anexos devem ser juntados manualmente.') }}</div>
+{% if ok %}<div class="card ok-note" role="status"><b>{{ ok }}</b> — {{ t('Resposta registrada. Ela será integrada pelo agente na próxima versão do dossiê.') }}</div>{% endif %}
+{% for m in msgs %}
+<div class="card{{ ' answered' if respostas.get(m.id) }}" id="{{ m.id }}">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ m.id }} — {{ m.destinatario }}</h2>
+    <div class="row">
+      <button class="btn alt" onclick="copyText('body-{{ m.id }}',this)">{{ t('Copiar texto') }}</button>
+      {% if m.mailto %}<a class="btn alt" href="{{ m.mailto }}">{{ t('Abrir no e-mail') }}</a>{% endif %}
+      {% if m.via_bdr %}<span class="small muted" title="{{ t('O cliente é contatado por intermédio do BDR: copie o texto e transmita-o ao BDR.') }}">{{ t('Envio pelo BDR — sem botão de e-mail') }}</span>{% endif %}
+      {% if m.md %}<a class="btn alt" href="{{ base }}file/msg-{{ m.md }}">{{ t('Baixar .md') }}</a>{% endif %}
+    </div>
+  </div>
+  <p class="small"><b>{{ t('Para:') }}</b> {{ m.para }}<br><b>{{ t('Assunto:') }}</b> {{ m.assunto }}<br>
+  <b>{{ t('Pendências cobertas:') }}</b> {% for p in m.pendencias %}<span class="chip">{{ p }}</span>{% endfor %}</p>
+  {% if m.corpo_pt and m.corpo_pt != m.corpo %}
+  <pre class="msg">{{ m.corpo }}</pre>
+  <details><summary class="small">{{ t('Texto original') }}</summary><pre class="msg" id="body-{{ m.id }}" lang="pt-BR">{{ m.corpo_pt }}</pre></details>
+  {% else %}
+  <pre class="msg" id="body-{{ m.id }}">{{ m.corpo }}</pre>
+  {% endif %}
+  <h3>{{ t('Anexos') }}</h3>
+  <table class="tbl">
+  <tr><th>{{ t('Anexo previsto') }}</th><th>{{ t('Arquivo(s)') }}</th></tr>
+  {% for a in m.anexos_r %}<tr><td>{{ a.texto }}</td><td>
+    {% for l in a.links %}<a href="{{ base }}{{ l.href }}" target="_blank">{{ l.nome }}</a> · <a class="small" href="{{ base }}{{ l.href }}&download=1">{{ t('baixar') }}</a><br>{% endfor %}
+    {% if a.mensagem %}<a href="#{{ a.mensagem }}">{{ t('ver mensagem') }} {{ a.mensagem }}</a>{% endif %}
+    {% if a.manual %}<span class="chip" style="background:var(--amber);color:#fff">{{ t('a juntar manualmente — não disponível no dossiê') }}</span>{% endif %}
+  </td></tr>{% endfor %}
+  </table>
+  {% if m.id in acoes %}{{ R.formulario(m.id, acoes[m.id]) }}{% endif %}
+  {{ R.recebidas(respostas.get(m.id, [])) }}
+</div>
+{% endfor %}
+{% if not msgs %}<div class="card">{{ t('Nenhuma mensagem necessária nesta versão.') }}</div>{% endif %}
+{% endblock %}

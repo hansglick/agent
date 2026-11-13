@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ cid }} · {{ t('Documentos') }}{% endblock %}
+{% block body %}
+{% set ST_CLS = {'preparacao': 'st-prep', 'andamento': 'st-run', 'tratado': 'st-done'} %}
+<p class="small"><a href="/c/{{ cid }}">← {{ t('Voltar ao painel do dossiê') }}</a> · <span class="st-pill {{ ST_CLS[status] }}">{{ t(STATUS[status]) }}</span></p>
+
+
+<section class="card dash-sec">
+  <h2>{{ t('Documentos do dossiê') }} <span class="muted small">({{ inv.n }} · {{ (inv.tamanho_total / 1048576)|round(1) }} MB)</span></h2>
+  {% if inv.importado_em %}<p class="small muted" style="margin-top:0">{{ t('Pasta de origem') }} : <b>{{ inv.origem }}</b> · {{ t('importada em') }} {{ fmt_data(inv.importado_em) }}{% if inv.ignorados %} · {{ inv.ignorados|length }} {{ t('arquivo(s) de sistema ignorado(s)') }}{% endif %}</p>{% endif %}
+  {% if inv.nota %}<p class="small muted" style="margin-top:0">{{ t(inv.nota) }}</p>{% endif %}
+  {% if pastas %}
+  <input type="search" placeholder="{{ t('Filtrar…') }}" oninput="filterRows(this,'.docs tr.d')" style="margin-bottom:8px">
+  <div class="scroll"><table class="tbl docs">
+    <tr><th>{{ t('Pasta') }}</th><th>{{ t('Arquivo') }}</th><th>{{ t('Tamanho') }}</th></tr>
+    {% for pasta, fs in pastas.items() %}{% for f in fs %}<tr class="d">
+      <td class="small muted">{{ pasta or '/' }}</td>
+      <td>{% if servivel or f.armazenado == 'documentos' %}<a href="/c/{{ cid }}/doc?path={{ f.caminho|urlencode }}" target="_blank" rel="noopener">{{ f.nome }}</a>{% else %}{{ f.nome }}{% endif %}</td>
+      <td class="mono">{{ '{:,.0f}'.format(f.tamanho / 1024)|replace(',', ' ') }} KB</td></tr>{% endfor %}{% endfor %}
+  </table></div>
+  {% else %}<p>{{ t('Nenhum documento inventariado para este dossiê.') }}</p>{% endif %}
+</section>
+{% endblock %}

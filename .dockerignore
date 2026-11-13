@@ -1,0 +1,13 @@
+.venv
+.git
+.envios
+.pytest_cache
+**/__pycache__
+*.zip
+*.log
+cases
+sauvegardes
+data/files
+portage
+tests
+kyc_agent/cases_tc187_v2.py

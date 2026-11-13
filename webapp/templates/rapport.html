@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ s.caso.id }} · {{ t('Relatório') }}{% endblock %}
+{% block body %}
+{% set pend = s.pendencias %}
+<div class="kpi" style="margin-bottom:14px">
+  <div><span class="muted small">{{ t('Pendências que condicionam o KYC') }}</span><b>{{ pend|selectattr('condiciona','equalto','KYC')|list|length }}</b></div>
+  <div><span class="muted small">{{ t('Pontos de DD') }}</span><b>{{ pend|selectattr('condiciona','equalto','DD')|list|length }}</b></div>
+  <div><span class="muted small">{{ t('Riscos que bloqueiam o KYC') }}</span><b>{{ s.riscos|selectattr('bloqueia_kyc')|list|length }} / {{ s.riscos|length }}</b></div>
+  <div><span class="muted small">{{ t('Partes registradas') }}</span><b>{{ s.partes|length }}</b></div>
+  <div><a class="muted small" href="{{ base }}verificacoes">{{ t('Acessos bloqueados (registro técnico)') }}</a><b>{{ (s.registro_tecnico or [])|length }}</b></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ t('Relatório KYC / KYB / AML — versão') }} {{ v }}</h2>
+    <div class="row">
+      {% if dl.relatorio %}<a class="btn" href="{{ base }}file/relatorio" target="_blank">{{ t('Abrir o PDF') }}</a>
+      <a class="btn alt" href="{{ base }}file/relatorio?download=1">{{ t('Baixar') }}</a>{% endif %}
+    </div>
+  </div>
+  <p class="muted small">{{ s.guia_referencia or '' }}</p>
+  <p>{{ s.recomendacao.resumo }}</p>
+  <h3>{{ t('Fundamentação') }}</h3><ul>{% for j in s.recomendacao.justificativa %}<li>{{ j }}</li>{% endfor %}</ul>
+  <p><b>{{ t('Caminho para conclusão:') }}</b> {{ s.recomendacao.caminho_para_validacao }}</p>
+  <p><b>{{ t('Escalonamento:') }}</b> {{ s.recomendacao.escalonamento }}</p>
+</div>
+
+<div class="card"><h2>{{ t('1.2 Partes') }}</h2><div class="scroll"><table class="tbl">
+<tr><th>{{ t('Parte') }}</th><th>{{ t('Identificação') }}</th><th>{{ t('Papéis') }}</th><th>{{ t('Fonte do vínculo') }}</th><th>{{ t('Tratamento KYC') }}</th></tr>
+{% for p in s.partes %}<tr><td><b>{{ p.id }}</b> {{ p.nome }}</td><td>{{ p.tipo }} · {{ p.cpf }}</td><td>{{ p.papeis|join('\n') }}</td><td>{{ p.vinculo_fonte or '' }}</td><td>{{ p.kyc }}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h2>{{ t('1.3 Controles') }}</h2>
+<input type="search" placeholder="{{ t('Filtrar controles…') }}" oninput="filterRows(this,'#ctl tr.r')">
+<div class="scroll" style="margin-top:8px"><table class="tbl" id="ctl">
+<tr><th>#</th><th>{{ t('Nível') }}</th><th>{{ t('Controle') }}</th><th>{{ t('Partes') }}</th><th>{{ t('Estado') }}</th><th>{{ t('Execução') }}</th><th>{{ t('Resultado → conclusão') }}</th><th>{{ t('Evid.') }}</th></tr>
+{% for k in s.controles %}<tr class="r"><td>{{ k.id }}</td><td>{{ k.nivel or '' }}</td><td>{{ k.controle }}</td><td>{{ k.partes or k.sujeitos or '' }}</td><td>{{ k.estado or '' }}</td><td>{{ k.execucao }}</td><td>{{ k.resultado }}{% if k.conclusao %}
+→ {{ k.conclusao }}{% endif %}</td><td>{{ k.evidencias|join(', ') }}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h2>{{ t('1.4 Fluxos financeiros') }}</h2><div class="scroll"><table class="tbl">
+<tr><th>#</th><th>{{ t('Pagador') }}</th><th>{{ t('Recebedor') }}</th><th>{{ t('Valor') }}</th><th>{{ t('Motivo') }}</th><th>{{ t('Base contratual') }}</th><th>{{ t('Natureza') }}</th></tr>
+{% for f in s.fluxos %}<tr><td>{{ f.id }}</td><td>{{ f.pagador }}</td><td>{{ f.recebedor }}</td><td>{{ f.valor }}</td><td>{{ f.motivo }}</td><td>{{ f.base_contratual }}</td><td>{{ f.natureza }}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h2>{{ t('1.5 Pontos já esclarecidos') }}</h2><div class="scroll"><table class="tbl">
+<tr><th>#</th><th>{{ t('Ponto') }}</th><th>{{ t('Conclusão') }}</th><th>{{ t('Natureza') }}</th><th>{{ t('Evid.') }}</th></tr>
+{% for x in s.pontos_esclarecidos %}<tr><td>{{ x.id }}</td><td>{{ x.ponto }}</td><td>{{ x.conclusao }}</td><td>{{ x.natureza }}</td><td>{{ x.evidencias|join(', ') }}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h2>{{ t('1.6 Riscos que subsistem') }}</h2><div class="scroll"><table class="tbl">
+<tr><th>#</th><th>{{ t('Risco') }}</th><th>{{ t('Fato / fonte') }}</th><th>{{ t('Medidas') }}</th><th>{{ t('Residual') }}</th></tr>
+{% for r in s.riscos %}<tr><td><b>{{ r.id }}</b>
+{{ r.importancia|upper }}
+{{ t('BLOQUEIA KYC') if r.bloqueia_kyc else t('não bloqueia') }}</td>
+<td><b>{{ r.titulo }}</b>{% if r.evento %}
+{{ t('Evento:') }} {{ r.evento }}
+{{ t('Parte/fluxo:') }} {{ r.parte_fluxo }}{% endif %}</td>
+<td>{{ r.fato_fonte or r.descricao }}</td>
+<td>{% if r.medida_executada %}{{ t('Executado:') }} {{ r.medida_executada }}
+{{ t('Proposto:') }} {{ r.medida_proposta }}{% else %}{{ r.ligacao }}{% endif %}</td><td>{{ r.risco_residual or '' }}</td></tr>{% endfor %}
+</table></div></div>
+
+<div class="card"><h2>{{ t('1.7 O que ainda deve ser recebido') }}</h2>
+{% for titulo, cond in [('Condiciona o KYC','KYC'),('Due diligence (posterior)','DD')] %}
+<h3>{{ t(titulo) }}</h3><div class="scroll"><table class="tbl">
+<tr><th>#</th><th>{{ t('Item') }}</th><th>{{ t('Complemento esperado') }}</th><th>{{ t('Critério de fechamento') }}</th><th>{{ t('Responsável / etapa') }}</th></tr>
+{% for p in pend if p.condiciona==cond %}<tr><td>{{ p.id }} {% if p.prioridade %}<span class="chip">{{ p.prioridade }}</span>{% endif %}</td><td>{{ p.item }}</td><td>{{ p.esperado }}</td><td>{{ p.criterio_fechamento or '' }}</td><td>{{ p.responsavel }}
+{{ p.etapa_limite }}</td></tr>{% endfor %}
+</table></div>{% endfor %}
+{% if s.condicoes %}<h3>{{ t('Condições (§13.3)') }}</h3><table class="tbl">
+<tr><td><b>{{ t('Já cumpridas') }}</b></td><td>{{ s.condicoes.ja_cumpridas|join('\n') }}</td></tr>
+<tr><td><b>{{ t('Necessárias ao KYC') }}</b></td><td>{{ s.condicoes.necessarias_ao_kyc|join('\n') }}</td></tr>
+<tr><td><b>{{ t('Antes de assinatura / closing') }}</b></td><td>{{ s.condicoes.antes_assinatura_closing|join('\n') }}</td></tr></table>{% endif %}
+</div>
+
+{% if s.registro_tecnico %}<div class="card warn"><b>{{ t('Verificações bloqueadas') }} ({{ s.registro_tecnico|length }}):</b> {{ t('ver a aba') }} <a href="{{ base }}verificacoes">{{ t('Verificações') }}</a>.</div>{% endif %}
+
+{% if s.execucao_revisao %}<div class="card" id="revisao"><h2>{{ t('1.8 Revisão e autorização') }}</h2><table class="tbl">
+<tr><th>{{ t('Etapa') }}</th><th>{{ t('Identidade') }}</th><th>{{ t('Data') }}</th></tr>
+<tr><td>{{ t('Execução') }}</td><td>{{ s.execucao_revisao.executado_por }}</td><td>{{ s.data_analise }}</td></tr>
+<tr><td>{{ t('Revisão') }}</td><td>{{ s.execucao_revisao.revisado_por or t('pendente') }}</td><td>{{ s.execucao_revisao.data_revisao or '—' }}</td></tr>
+<tr><td>{{ t('Autorização') }}</td><td>{{ s.execucao_revisao.autorizado_por or t('pendente') }}</td><td>{{ s.execucao_revisao.data_autorizacao or '—' }}</td></tr>
+</table></div>{% endif %}
+
+<div class="card"><h2>{{ t('Journal de versões') }}</h2>
+{% for h in s.historico|reverse %}<details {{ 'open' if loop.first }}><summary>{{ t('Versão') }} {{ h.versao }} — {{ h.data }} — {{ h.evento }}</summary>
+<ul>{% for m in h.mudancas %}<li>{{ m }}</li>{% endfor %}</ul></details>{% endfor %}
+</div>
+
+{% if dl.relatorio %}<div class="card"><details><summary>{{ t('Pré-visualizar o PDF do relatório') }}</summary>
+<iframe src="{{ base }}file/relatorio" style="width:100%;height:80vh;border:1px solid var(--line);border-radius:8px;margin-top:8px" title="{{ t('Relatório') }} PDF"></iframe></details></div>{% endif %}
+{% endblock %}

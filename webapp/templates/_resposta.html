@@ -1,0 +1,54 @@
+{# Composant générique de réponse — utilisé par les onglets Vérifications et Messages.
+   Importer avec : {% import "_resposta.html" as R with context %} #}
+
+{% macro formulario(item_id, lista_acoes) %}
+<div class="answer">
+  <div class="answer-k">{{ t('Responder') }}</div>
+  <div class="answer-btns">
+  {% for a in lista_acoes %}
+    <details class="answer-a" name="ans-{{ item_id }}">
+      <summary class="btn {{ 'btn-ignorar' if a.dispensa else ('btn-decl' if a.confirmacao else 'btn-alt2') }}">{{ t(a.rotulo) }}</summary>
+      <form method="post" action="{{ base }}resposta" enctype="multipart/form-data" class="answer-form">
+        <input type="hidden" name="item" value="{{ item_id }}"><input type="hidden" name="acao" value="{{ a.id }}">
+        {% if a.ajuda %}<p class="small">{{ t(a.ajuda) }}</p>{% endif %}
+        {% if a.confirmacao %}
+          <label class="confirm"><input type="checkbox" name="confirmo" value="1" required> {{ t(a.confirmacao) }}</label>
+        {% endif %}
+        {% if a.dispensa and a.pendencias %}
+          <fieldset class="fld pend-dispensa"><legend>{{ t('Pendências a dispensar') }}</legend>
+          {% for p in a.pendencias %}<label class="confirm"><input type="checkbox" name="pendencias" value="{{ p }}">
+            <b>{{ p }}</b> — {{ t(pend_titulos.get(p, '')) if pend_titulos is defined else '' }}</label>{% endfor %}
+          </fieldset>
+        {% endif %}
+        {% if a.texto and a.texto != 'nao' %}
+          <label class="fld"><span>{{ t(a.rotulo_texto) if a.rotulo_texto else (t('Texto') if a.texto=='obrigatorio' else t('Comentário (opcional)')) }}</span>
+          <textarea name="texto" rows="{{ 8 if a.rotulo_texto else 4 }}" maxlength="20000" {{ 'required' if a.texto=='obrigatorio' }}></textarea></label>
+        {% endif %}
+        {% if a.arquivos and a.arquivos != 'nao' %}
+          <label class="fld"><span>{{ t(a.rotulo_arquivos) if a.rotulo_arquivos else t('Documentos') }}{{ '' if a.arquivos=='obrigatorio' else ' ' ~ t('(opcional)') }} — {{ t('Formatos aceitos:') }} {{ a.aceita or '.pdf,.png,.jpg,.jpeg,.xlsx,.csv,.txt' }}</span>
+          <input type="file" name="arquivos" accept="{{ a.aceita or '' }}" {{ 'multiple' if a.multiplo }} {{ 'required' if a.arquivos=='obrigatorio' }}></label>
+        {% endif %}
+        {% if a.efeito %}<p class="small muted"><b>{{ t('Efeito:') }}</b> {{ t(a.efeito) }}</p>{% endif %}
+        <button class="btn" type="submit">{{ t('Confirmar e registrar') if a.confirmacao else t('Enviar') }}</button>
+      </form>
+    </details>
+  {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+{% macro recebidas(lista) %}
+{% if lista %}
+<div class="received">
+  <div class="answer-k">{{ t('Respostas recebidas') }} ({{ lista|length }})</div>
+  <ul>{% for r in lista|reverse %}
+    <li><b>{{ t(r.rotulo) }}</b>{% if r.pendencias_dispensadas %} ({{ r.pendencias_dispensadas|join(', ') }}){% endif %} · {{ r.recebida_em[:16]|replace('T',' ') }} UTC · {{ r.autor }}
+      {% if r.integrada_em_versao %}<span class="chip ok">{{ t('integrada na versão') }} {{ r.integrada_em_versao }}</span>
+      {% else %}<span class="chip warn-chip">{{ t('recebida — aguardando integração pelo agente') }}</span>{% endif %}
+      {% if r.texto %}<div class="small resp-txt">{{ r.texto }}</div>{% endif %}
+      {% if r.confirmacao %}<div class="small muted">✔ {{ t(r.confirmacao) }}</div>{% endif %}
+      {% for f in r.arquivos %}<div class="small">📎 {{ f.original }} ({{ (f.tamanho/1024)|round(0)|int }} KB)</div>{% endfor %}
+    </li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% endmacro %}

@@ -1,0 +1,45 @@
+L’objectif est que l’agent me remette un dossier analysé, prêt pour ma revue, avec les conclusions justifiées et les messages que je dois éventuellement envoyer.
+
+1. Un rapport d’analyse KYC / KYB / AML en PDF
+
+Avec une structure numérotée :
+
+1.1 Synthèse : opération, contreparties et recommandation proposée selon les statuts du guide.
+1.2 Parties : sociétés, associés, bénéficiaires effectifs, dirigeants et autres participants significatifs, avec leurs rôles.
+1.3 Documents et contrôles : ce qui a été reçu, examiné et vérifié, avec les résultats et les preuves.
+1.4 Flux financiers pertinents : qui paie qui, combien, pourquoi et sur quelle base contractuelle.
+1.5 Points déjà éclaircis.
+1.6 Risques et incohérences qui subsistent, leur importance et leur lien avec l’opération.
+1.7 Ce qui doit encore être reçu pour pouvoir conclure, en distinguant ce qui conditionne le KYC de ce qui peut être traité ultérieurement en due diligence.
+
+2. Une matrice opérationnelle à quatre colonnes
+
+- Point à résoudre / risque.
+- Réponse, document ou décision attendu.
+- Responsable et étape limite.
+- Référence ou lien vers les preuves déjà examinées.
+
+Cette matrice doit contenir uniquement les véritables dépendances externes. Les lectures, rapprochements et analyses que l’agent peut effectuer avec les éléments disponibles doivent être réalisés dans le cycle.
+
+3. Des brouillons de messages prêts à envoyer
+
+Un message distinct pour chaque interlocuteur utile : client, BDR, Juridique ou CEO. Chaque message doit préciser la demande exacte et les pièces à joindre. Aucun message ne doit être créé si aucune demande n’est nécessaire.
+
+Je reste celui qui relit et envoie les messages, puis transmet les réponses à l’agent.
+
+4. Un dossier ZIP de preuves organisé par catégorie
+
+Avec un index permettant de retrouver les documents et justificatifs utilisés pour soutenir les conclusions.
+
+Quelques règles essentielles :
+
+- Ne pas redemander une information déjà présente dans les documents ou échanges.
+- Distinguer les contrôles déjà documentés, ceux réellement exécutés par l’agent et ceux impossibles faute d’accès.
+- Ne jamais présenter un contrôle non exécuté comme un résultat négatif.
+- Distinguer faits documentés, déclarations du client et hypothèses.
+- Rester dans le périmètre du guide et justifier les approfondissements.
+- Préparer une recommandation ; la validation finale reste humaine.
+
+Les livrables opérationnels sont en portugais. Une courte explication en français peut les accompagner pour moi. Le format technique interne — JSON ou autre — reste à définir avec toi.
+
+Lorsqu’une nouvelle réponse arrive, l’agent doit mettre à jour ce même dossier, expliquer ce qui change et clôturer les points résolus, sans recommencer toute l’analyse.

@@ -1,0 +1,80 @@
+{# Conversation avec l'agent : questions uniquement (lecture seule, aucune version produite) #}
+<button class="chat-fab" type="button" id="chat-fab" aria-expanded="false" aria-controls="chat-box"
+  title="{{ t('Conversar com o agente') }}" aria-label="{{ t('Conversar com o agente') }}">
+  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/></svg>
+  <span class="chat-dot" id="chat-dot" hidden></span>
+</button>
+<section class="chat-box" id="chat-box" role="dialog" aria-labelledby="chat-h" hidden>
+  <div class="chat-hd"><b id="chat-h">{{ t('Conversa com o agente') }}</b>
+    <button type="button" id="chat-nova" title="{{ t('O agente recomeça sem o contexto da conversa atual (arquivada).') }}">{{ t('Nova conversa') }}</button>
+    <button type="button" id="chat-x" aria-label="{{ t('Fechar') }}">✕</button></div>
+  <div class="chat-note">{{ t('Somente perguntas: o agente consulta o dossiê sem modificá-lo. Para mudar o dossiê, use a requisição de atualização (lápis laranja).') }}</div>
+  <div class="chat-msgs" id="chat-msgs" aria-live="polite"></div>
+  <form class="chat-in" id="chat-form">
+    <textarea id="chat-t" maxlength="4000" placeholder="{{ t('Sua pergunta…') }}" aria-label="{{ t('Sua pergunta…') }}"></textarea>
+    <button type="submit" id="chat-send">Send</button>
+  </form>
+</section>
+<script>
+(function(){
+  const CID = {{ hdr.id|tojson }}, $ = id => document.getElementById(id);
+  const L = {pensa: {{ t('O agente está pensando')|tojson }}, sug: {{ t('Usar como requisição de atualização')|tojson }},
+             vazio: {{ t('Faça uma pergunta sobre o dossiê: controles, peças, pendências, regras do guia…')|tojson }}};
+  let aberto = false, estado = 'pronto', timer = null, n = -1;
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const md = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  const hora = iso => { try { return new Date(iso).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}); } catch(e) { return ''; } };
+  function sugestao(txt){ const i = txt.indexOf('Requête suggérée'); return i < 0 ? null : txt.slice(i).replace(/^Requête suggérée\s*:?\s*/, '').trim(); }
+  function usar(txt){
+    const d = $('dlg-requete');
+    if (d && !$('btn-requete').disabled) { $('rq-texto').value = txt; d.showModal(); return; }
+    try { sessionStorage.setItem('kyc-requete-' + CID, txt); } catch(e) {}
+    location.href = '/c/' + encodeURIComponent(CID) + '/painel';
+  }
+  function render(c){
+    const box = $('chat-msgs'); box.innerHTML = '';
+    if (!c.mensagens.length) box.innerHTML = '<div class="chat-vide">' + esc(L.vazio) + '</div>';
+    for (const m of c.mensagens) {
+      const d = document.createElement('div');
+      d.className = 'chat-m ' + (m.papel === 'usuario' ? 'chat-u' : 'chat-a' + (m.erro ? ' chat-err' : ''));
+      d.innerHTML = md(m.texto || '');
+      const meta = document.createElement('div'); meta.className = 'chat-meta';
+      meta.textContent = hora(m.em) + (m.papel === 'usuario' && m.versao ? ' · v' + m.versao : '') + (m.custo_usd ? ' · ' + m.custo_usd.toFixed(2) + ' $' : '') + (m.aviso ? ' · ' + m.aviso : '');
+      d.appendChild(meta);
+      const s = m.papel !== 'usuario' && !m.erro && sugestao(m.texto || '');
+      if (s) { const b = document.createElement('button'); b.type = 'button'; b.className = 'chat-sug'; b.textContent = L.sug; b.onclick = () => usar(s); d.appendChild(b); }
+      box.appendChild(d);
+    }
+    if (c.estado === 'pensando') { const w = document.createElement('div'); w.className = 'chat-wait'; w.textContent = L.pensa + (c.atividade ? ' — ' + c.atividade : ''); box.appendChild(w); }
+    if (c.mensagens.length !== n || c.estado === 'pensando') box.scrollTop = box.scrollHeight;
+    n = c.mensagens.length;
+    $('chat-send').disabled = c.estado === 'pensando'; $('chat-nova').disabled = c.estado === 'pensando';
+    $('chat-dot').hidden = c.estado !== 'pensando';
+  }
+  async function carregar(){
+    try { const r = await fetch('/c/' + encodeURIComponent(CID) + '/conversa.json', {cache: 'no-store'}); const c = await r.json(); estado = c.estado; render(c); } catch(e) {}
+    clearTimeout(timer); if (estado === 'pensando') timer = setTimeout(carregar, 2000);
+  }
+  async function post(url, body){
+    const r = await fetch(url, {method: 'POST', body});
+    const c = await r.json();
+    if (!r.ok) { alertaChat(c.detail || r.status); return; }
+    estado = c.estado; render(c); clearTimeout(timer); if (estado === 'pensando') timer = setTimeout(carregar, 2000);
+  }
+  function alertaChat(msg){ const w = document.createElement('div'); w.className = 'chat-m chat-a chat-err'; w.textContent = msg; $('chat-msgs').appendChild(w); }
+  function abrir(v){ aberto = v; $('chat-box').hidden = !v; $('chat-fab').setAttribute('aria-expanded', v); if (v) { carregar(); $('chat-t').focus(); }
+    try { sessionStorage.setItem('kyc-chat-aberto', v ? '1' : ''); } catch(e) {} }
+  $('chat-fab').onclick = () => abrir(!aberto);
+  $('chat-x').onclick = () => abrir(false);
+  $('chat-nova').onclick = () => post('/c/' + encodeURIComponent(CID) + '/conversa/nova', new FormData());
+  $('chat-form').onsubmit = e => { e.preventDefault(); const t = $('chat-t').value.trim(); if (!t || estado === 'pensando') return;
+    const f = new FormData(); f.append('texto', t); $('chat-t').value = ''; post('/c/' + encodeURIComponent(CID) + '/conversa', f); };
+  $('chat-t').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('chat-form').requestSubmit(); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && aberto && !document.querySelector('dialog[open]')) abrir(false); });
+  try { if (sessionStorage.getItem('kyc-chat-aberto')) abrir(true); else carregar(); } catch(e) { carregar(); }
+  // requête suggérée par l'agent depuis un autre onglet : ouverte sur le tableau de bord
+  try { const s = sessionStorage.getItem('kyc-requete-' + CID); if (s && $('dlg-requete') && !$('btn-requete').disabled) {
+    sessionStorage.removeItem('kyc-requete-' + CID); $('rq-texto').value = s; $('dlg-requete').showModal(); } } catch(e) {}
+})();
+</script>

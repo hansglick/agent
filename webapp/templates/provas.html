@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ s.caso.id }} · {{ t('Provas') }}{% endblock %}
+{% block body %}
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ t('Pacote de provas — versão') }} {{ v }}</h2>
+    {% if dl.zip %}<a class="btn" href="{{ base }}file/zip">{{ t('Baixar o ZIP completo') }} ({{ (zip_size/1048576)|round(1) }} MB)</a>{% endif %}
+  </div>
+  <p class="muted small">{{ n_arquivos }} {{ t('arquivos indexados (INDICE.csv do ZIP). Cada linha leva ao arquivo dentro do ZIP, com origem, descrição, seção que sustenta e SHA-256.') }}</p>
+  <input type="search" placeholder="{{ t('Filtrar por nome, pasta, descrição, ID…') }}" oninput="filterRows(this,'tr.r')">
+</div>
+{% for pasta, rows in pastas.items() %}
+<div class="card">
+  <h3 style="margin-top:0">📁 {{ pasta }} <span class="muted small">({{ rows|length }})</span></h3>
+  <div class="scroll"><table class="tbl">
+  <tr><th>ID</th><th>{{ t('Arquivo') }}</th><th>{{ t('Origem') }}</th><th>{{ t('Descrição') }}</th><th>{{ t('Sustenta') }}</th><th>{{ t('Tamanho') }}</th><th>SHA-256</th></tr>
+  {% for r in rows %}<tr class="r">
+    <td>{{ r.id }}</td>
+    <td>{% if r.existe %}<a href="{{ base }}zip/item?path={{ r.arquivo_no_zip|urlencode }}" target="_blank">{{ r.arquivo_no_zip.split('/')[-1] }}</a>
+        · <a class="small" href="{{ base }}zip/item?path={{ r.arquivo_no_zip|urlencode }}&download=1">{{ t('baixar') }}</a>{% else %}{{ r.arquivo_no_zip }} <span class="chip">{{ t('ausente') }}</span>{% endif %}</td>
+    <td>{{ r.origem }}</td><td>{{ r.descricao }}</td><td>{{ r.sustenta }}</td>
+    <td style="white-space:nowrap">{{ (r.tamanho/1024)|round(0)|int }} KB</td>
+    <td class="small" title="{{ r.sha256 }}">{{ r.sha256[:12] }}…</td>
+  </tr>{% endfor %}
+  </table></div>
+</div>
+{% endfor %}
+{% if not pastas %}<div class="card warn">{{ t('Nenhum ZIP de provas nesta versão.') }}</div>{% endif %}
+{% endblock %}

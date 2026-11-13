@@ -1,0 +1,4 @@
+{% macro wa_pill(cid, n) -%}
+<span class="wa-pill" data-cid="{{ cid }}" data-one="{{ t('Agente trabalhando') }}" data-many="{{ t('agentes trabalhando') }}" {{ 'hidden' if not n }}
+  title="{{ t('Uma atualização do dossiê está em execução') }}"><i aria-hidden="true"></i><span>{{ (n ~ ' ' ~ t('agentes trabalhando')) if n and n > 1 else t('Agente trabalhando') }}</span></span>
+{%- endmacro %}

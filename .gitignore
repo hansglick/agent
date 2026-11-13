@@ -1,0 +1,14 @@
+# Données clients : JAMAIS dans le dépôt de code (en ligne, elles vivent sur le disque persistant Render)
+cases/
+sauvegardes/
+data/files/
+kyc_agent/cases_tc187_v2.py
+.envios/
+# environnement local
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+*.zip
+tests/rapports/

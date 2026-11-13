@@ -1,0 +1,21 @@
+{
+  "_descricao": "Liste blanche des sites vers lesquels l'agent peut ENVOYER des données (formulaire, requête POST, API). Les consultations simples (lecture d'une page) ne sont pas concernées. Toute modification doit être validée par le Compliance Supervisor. La liste est lue au démarrage de chaque exécution : l'agent ne peut pas la modifier pendant son travail.",
+  "_atualizado_em": "2026-11-12",
+  "sufixos": [
+    {"sufixo": "gov.br", "motivo": "Administrations publiques brésiliennes (Receita, CGU, IBAMA, INCRA/SIGEF, CVM, BCB, Caixa, prefeituras, gov.br)"},
+    {"sufixo": "jus.br", "motivo": "Pouvoir judiciaire brésilien (CNJ/DataJud, tribunaux de justice, TST)"},
+    {"sufixo": "mp.br", "motivo": "Ministère public brésilien"},
+    {"sufixo": "leg.br", "motivo": "Pouvoir législatif brésilien"},
+    {"sufixo": "treas.gov", "motivo": "Trésor américain — OFAC Sanctions List Search"},
+    {"sufixo": "treasury.gov", "motivo": "Trésor américain — OFAC"},
+    {"sufixo": "un.org", "motivo": "Nations unies — liste consolidée du Conseil de sécurité"}
+  ],
+  "dominios": [
+    {"dominio": "indisponibilidade.onr.org.br", "motivo": "ONR — Central de indisponibilidade de bens (cité par le guide)"},
+    {"dominio": "www.ridigital.org.br", "motivo": "Registro de Imóveis do Brasil — certidões (cité par le guide)"},
+    {"dominio": "ridigital.org.br", "motivo": "Registro de Imóveis do Brasil"},
+    {"dominio": "www.pesquisaprotesto.com.br", "motivo": "CENPROT — pesquisa de protestos (cité par le guide)"},
+    {"dominio": "pesquisaprotesto.com.br", "motivo": "CENPROT — pesquisa de protestos"},
+    {"dominio": "1doc.com.br", "motivo": "Plateforme 1Doc utilisée par des prefeituras pour vérifier l'authenticité de leurs documents"}
+  ]
+}

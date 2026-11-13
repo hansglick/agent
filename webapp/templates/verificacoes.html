@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ s.caso.id }} · {{ t('Verificações') }}{% endblock %}
+{% block body %}
+{% import "_resposta.html" as R with context %}
+{% set reg = s.registro_tecnico or [] %}
+{% set acao = reg|selectattr('acao_humana')|list %}
+{% set info = reg|rejectattr('acao_humana')|list %}
+<div class="card verif-intro">
+  <h2 style="margin-top:0">{{ t('Verificações que o agente não pôde realizar') }}</h2>
+  <p>{{ t('O agente não contorna captchas e só consulta as bases que lhe são fornecidas. Quando um controle fica bloqueado, ele é registrado aqui (registro técnico interno) — nunca apresentado como resultado negativo.') }}</p>
+  <p class="small muted">{{ t('Não são pedidos a terceiros: são ações internas do Compliance. Depois de realizá-las, entregue o resultado ao agente, que o integra na próxima versão do dossiê.') }}</p>
+</div>
+{% if ok %}<div class="card ok-note" role="status"><b>{{ ok }}</b> — {{ t('Resposta registrada. Ela será integrada pelo agente na próxima versão do dossiê.') }}</div>{% endif %}
+
+{% for titulo, lista, cls in [(t('A realizar pelo Compliance'), acao, 'verif-todo'), (t('Para informação — nenhuma ação necessária'), info, 'verif-info')] if lista %}
+<h3 class="verif-h">{{ titulo }} <span class="muted small">({{ lista|length }})</span></h3>
+{% for it in lista %}
+{% set recebidas = respostas.get(it.id, []) %}
+<div class="card verif {{ cls }}{{ ' answered' if recebidas }}" id="{{ it.id }}">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0"><span class="chip">{{ it.id }}</span> <span class="chip {{ 'p1' if it.prioridade=='P1' else ('p2' if it.prioridade=='P2' else '') }}">{{ it.prioridade }}</span> {{ it.controle }}</h2>
+    {% if it.link %}<a class="btn" href="{{ it.link }}" target="_blank" rel="noopener">{{ t('Abrir o site ↗') }}</a>{% endif %}
+  </div>
+  <dl class="verif-dl">
+    <dt>{{ t('Por que não foi feito') }}</dt><dd>{{ it.incidente }}</dd>
+    <dt>{{ t('O que fazer') }}</dt><dd>{{ it.intervencao }}</dd>
+    {% if it.retorno_esperado %}<dt>{{ t('A devolver ao agente') }}</dt><dd>{{ it.retorno_esperado }}</dd>{% endif %}
+    <dt>{{ t('Impacto no dossiê') }}</dt><dd>{{ it.impacto }}</dd>
+    {% if it.evidencias %}<dt>{{ t('Evidências') }}</dt><dd>{% for e in it.evidencias %}<span class="chip">{{ e }}</span>{% endfor %}</dd>{% endif %}
+  </dl>
+
+  {% if it.id in acoes %}{{ R.formulario(it.id, acoes[it.id]) }}{% endif %}
+
+  {{ R.recebidas(recebidas) }}
+</div>
+{% endfor %}
+{% endfor %}
+{% if not reg %}<div class="card">{{ t('Nenhuma verificação bloqueada nesta versão.') }}</div>{% endif %}
+{% endblock %}

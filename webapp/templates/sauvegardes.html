@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Salvaguardas') }}{% endblock %}
+{% block body %}
+<p class="small"><a href="/">← {{ t('Voltar aos dossiês') }}</a></p>
+<section class="card">
+  <h2 style="margin-top:0">{{ t('Salvaguardas automáticas') }}</h2>
+  {% if iniciado %}<p class="small ok-note" style="padding:6px 10px">{{ t('Salvaguarda iniciada: atualize a página em alguns instantes.') }}</p>{% endif %}
+  <p class="small">{{ t('A cada') }} {{ bk.intervalo_min }} min, {{ t('cada dossiê modificado é copiado (estado, versões, entregáveis, respostas, diários). As peças são guardadas uma única vez, identificadas pela impressão digital. As') }} {{ garder }} {{ t('cópias mais recentes de cada dossiê são conservadas. Nenhuma cópia durante uma execução do agente.') }}</p>
+  <p class="small"><b>{{ t('Local') }} :</b> <span class="mono">{{ bk.destino }}</span>
+    {% if bk.mesmo_disco %}<br><span class="err">⚠ {{ t('As salvaguardas estão no mesmo disco que os dossiês: não protegem contra a perda ou o roubo do computador. Defina KYC_BACKUP_DIR para um disco externo ou um compartilhamento de rede salvo.') }}</span>{% endif %}</p>
+  <p class="small"><b>{{ t('Último ciclo') }} :</b> {% if bk.em %}{{ fmt_data(bk.em) }} · {{ bk.feitas|length }} {{ t('dossiê(s) salvo(s)') }} · {{ bk.sem_alteracao|length }} {{ t('sem alteração') }}{% if bk.adiadas %} · {{ bk.adiadas|length }} {{ t('adiado(s) (agente em execução)') }}{% endif %}{% else %}—{% endif %}
+    {% for c, e in (bk.erros or {}).items() %}<br><span class="err">{{ c }} : {{ e }}</span>{% endfor %}</p>
+  <form method="post" action="/sauvegardes/agora"><button class="btn" type="submit" {{ 'disabled' if bk.em_curso }}>{{ t('Salvar agora') }}</button></form>
+</section>
+{% for d in dossies %}
+<section class="card">
+  <h3 style="margin-top:0">{{ d.cid }} <span class="small muted">· {{ d.copias|length }} {{ t('cópia(s)') }} · {{ (d.tamanho / 1048576)|round(1) }} MB{% if not d.existe %} · {{ t('dossiê ausente da lista') }}{% endif %}</span></h3>
+  <div class="scroll"><table class="tbl">
+    <tr><th>{{ t('Cópia') }}</th><th>{{ t('Data') }}</th><th>{{ t('Tamanho (sem as peças)') }}</th><th></th></tr>
+    {% for c in d.copias %}<tr>
+      <td class="mono small">{{ c.nome }}</td><td>{{ fmt_data(c.em) }}</td><td class="mono">{{ (c.tamanho / 1024)|round(0)|int }} KB</td>
+      <td><form method="post" action="/sauvegardes/restaurar" onsubmit="return confirm({{ t('Restaurar esta cópia como um NOVO dossiê? O dossiê atual não é alterado.')|tojson }})">
+        <input type="hidden" name="cid" value="{{ d.cid }}"><input type="hidden" name="copia" value="{{ c.nome }}">
+        <button class="btn alt" type="submit">{{ t('Restaurar como novo dossiê') }}</button></form></td>
+    </tr>{% endfor %}
+  </table></div>
+</section>
+{% else %}<section class="card"><p>{{ t('Nenhuma salvaguarda ainda.') }}</p></section>{% endfor %}
+{% endblock %}

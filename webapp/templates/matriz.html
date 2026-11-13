@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ s.caso.id }} · {{ t('Matriz') }}{% endblock %}
+{% block body %}
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ t('Matriz operacional — versão') }} {{ v }}</h2>
+    {% if dl.matriz %}<a class="btn" href="{{ base }}file/matriz">{{ t('Baixar o XLSX') }}</a>{% endif %}
+  </div>
+  <p class="muted small">{{ t('Conteúdo lido diretamente do arquivo XLSX entregue. A primeira aba contém somente as dependências externas; os acessos bloqueados ficam no registro técnico interno.') }}</p>
+  <div class="row sub-tabs">{% for sh in sheets %}<a class="btn alt" href="#sh{{ loop.index }}">{{ sh.nome }} ({{ sh.linhas|length }})</a>{% endfor %}</div>
+</div>
+{% for sh in sheets %}
+<div class="card" id="sh{{ loop.index }}">
+  <div class="row" style="justify-content:space-between"><h2 style="margin:0">{{ sh.nome }}</h2>
+  <input type="search" placeholder="{{ t('Filtrar…') }}" oninput="filterRows(this,'#t{{ loop.index }} tr.r')"></div>
+  <div class="scroll" style="margin-top:8px"><table class="tbl" id="t{{ loop.index }}">
+    <tr>{% for h in sh.cab %}<th>{{ h }}</th>{% endfor %}</tr>
+    {% for r in sh.linhas %}<tr class="r">{% for c in r %}<td>{{ c }}</td>{% endfor %}</tr>{% endfor %}
+  </table></div>
+</div>
+{% endfor %}
+{% if not sheets %}<div class="card warn">{{ t('Nenhuma matriz nesta versão.') }}</div>{% endif %}
+{% endblock %}

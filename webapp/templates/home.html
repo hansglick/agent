@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}{{ t('Acompanhamento dos dossiês') }}{% endblock %}
+{% block body %}
+{% from "_macros.html" import wa_pill with context %}
+{% set ST_CLS = {'preparacao': 'st-prep', 'andamento': 'st-run', 'tratado': 'st-done'} %}
+<div class="home-top">
+  <div class="plus-wrap" data-plus>
+    <button class="btn-plus" type="button" onclick="menuPlus(this)" aria-haspopup="menu" aria-expanded="false" aria-label="{{ t('Novo dossiê') }}">
+      <span aria-hidden="true">+</span><small>{{ t('Novo dossiê') }}</small></button>
+    <div class="plus-menu" role="menu" hidden>
+      <button type="button" role="menuitem" onclick="fecharMenus();document.getElementById('pick').click()"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6h6l2 2h10v11H3z"/></svg>{{ t('Escolher uma pasta') }}</button>
+      <button type="button" role="menuitem" onclick="fecharMenus();document.getElementById('pick-zip').click()"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M11 4h2M11 7h2M11 10h2M11 13h2"/><rect x="10" y="15" width="4" height="4" rx="1"/></svg>{{ t('Escolher um arquivo ZIP') }}</button>
+    </div>
+  </div>
+  <input id="pick" type="file" webkitdirectory directory multiple hidden onchange="picked(this)">
+  <input id="pick-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden onchange="pickedZip(this)">
+  <div class="kpis home-kpis">
+    <div class="kpi-t"><b>{{ cases|length }}</b><span>{{ t('Dossiês') }}</span></div>
+    {% for k, lbl in STATUS.items() %}<div class="kpi-t"><b>{{ contagem[k] }}</b><span><i class="dot {{ ST_CLS[k] }}"></i>{{ t(lbl) }}</span></div>{% endfor %}
+  </div>
+</div>
+
+{% if excluido %}<div class="card ok-note small" role="status">{{ t('Dossiê excluído:') }} <b>{{ excluido }}</b></div>{% endif %}
+<div class="card">
+  <div class="scroll" style="max-height:none"><table class="tbl dossies">
+    <tr><th>{{ t('Dossiê') }}</th><th>{{ t('Nome') }}</th><th>{{ t('Status') }}</th><th>{{ t('Documentos') }}</th><th>{{ t('Versão') }}</th>
+      <th>{{ t('Recomendação') }}</th><th>{{ t('Ações a tomar') }}</th><th title="{{ t('Custo acumulado dos tokens consumidos pelo agente neste dossiê (equivalente API, US$).') }}">{{ t('Fatura') }}</th><th>{{ t('Criado há') }}</th><th><span class="sr">{{ t('Excluir') }}</span></th></tr>
+    {% for c in cases %}
+    <tr class="clickable{{ ' is-new' if c.id == novo }}" onclick="location.href='/c/{{ c.id }}'">
+      <td><a href="/c/{{ c.id }}"><b>{{ c.id }}</b></a>{% if c.id == novo %} <span class="chip ok">{{ t('novo') }}</span>{% endif %}</td>
+      <td>{{ c.nome }}</td>
+      <td><span class="st-pill {{ ST_CLS[c.status] }}">{{ t(STATUS[c.status]) }}</span> {{ wa_pill(c.id, c.agentes_ativos) }}</td>
+      <td class="num">{{ c.n_docs if c.n_docs is not none else '—' }}</td>
+      <td>{{ 'v' ~ c.v if c.v else '—' }}</td>
+      <td>{{ c.recomendacao or '—' }}</td>
+      <td class="num">{% if c.acoes %}<span class="chip chip-todo">{{ c.acoes }}</span>{% else %}—{% endif %}</td>
+      <td class="mono num" {% if c.fatura.nao_medidas %}title="{{ t('Versões não medidas separadamente:') }} {% for x in c.fatura.nao_medidas %}v{{ x }}{{ ', ' if not loop.last }}{% endfor %}"{% endif %}>
+        {%- if c.fatura.medidas %}{{ fmt_usd(c.fatura.custo) }}{% if c.fatura.nao_medidas %} <span class="muted">+ {{ t('n. medido') }}</span>{% endif %}
+        {%- elif c.v %}<span class="muted small">{{ t('não medido') }}</span>{% else %}{{ fmt_usd(0) }}{% endif %}</td>
+      <td class="mono" {% if c.criado_em %}title="{{ fmt_data(c.criado_em) }}"{% endif %}>{{ fmt_dur(c.idade_s) if c.idade_s is not none else '—' }}</td>
+      <td class="num"><button class="btn-trash" type="button" title="{{ t('Excluir o dossiê') }} {{ c.id }}" aria-label="{{ t('Excluir o dossiê') }} {{ c.id }}"
+        data-id="{{ c.id }}" data-nome="{{ c.nome }}" data-docs="{{ c.n_docs if c.n_docs is not none else 0 }}" data-v="{{ c.v or 0 }}"
+        onclick="event.stopPropagation(); pedirExclusao(this)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4zM6 9h12l-1 12H7zm4 2v8h1.6v-8zm2.4 0v8H14v-8z" fill="currentColor"/></svg></button></td>
+    </tr>{% endfor %}
+    {% if not cases %}<tr><td colspan="10">{{ t('Nenhum dossiê. Clique em «+» para criar o primeiro.') }}</td></tr>{% endif %}
+  </table></div>
+</div>
+<p class="small muted bk-line">💾 {{ t('Salvaguarda automática') }} :
+  {% if not bk.ativa %}{{ t('desativada') }}
+  {% elif bk.em %}{{ t('última verificação há') }} {{ fmt_dur(bk.idade_s) if bk.idade_s is not none else '—' }}{% if bk.feitas %} · {{ bk.feitas|length }} {{ t('dossiê(s) salvo(s)') }}{% endif %}{% if bk.erros %} · <b class="err">{{ bk.erros|length }} {{ t('erro(s)') }}</b>{% endif %}
+  {% else %}{{ t('primeira salvaguarda em alguns minutos') }}{% endif %}
+  · {{ t('a cada') }} {{ bk.intervalo_min }} min · <a href="/sauvegardes">{{ t('Ver as salvaguardas') }}</a>
+  {% if bk.mesmo_disco %}· <span title="{{ bk.destino }}">⚠ {{ t('no mesmo disco que os dossiês') }}</span>{% endif %}</p>
+
+<dialog id="dlg" class="dlg">
+  <form id="fnovo" method="dialog" onsubmit="return enviar(event)">
+    <h2 style="margin-top:0">{{ t('Novo dossiê') }}</h2>
+    <p class="small" id="resumo"></p>
+    <label class="fld"><span>{{ t('Identificador do dossiê') }}</span>
+      <input name="id" required maxlength="40" pattern="[A-Za-z0-9._\-]{1,40}" value="{{ proximo_id }}"
+        title="{{ t('Letras sem acento, números, ponto, traço e sublinhado; sem espaços (ex.: TC-187-TESTE)') }}"
+        oninput="this.value = this.value.replace(/\s/g, '-')"></label>
+    <p class="small muted" style="margin:-6px 0 8px">{{ t('Letras sem acento, números, ponto, traço e sublinhado; sem espaços (ex.: TC-187-TESTE)') }}</p>
+    <label class="fld"><span>{{ t('Nome do dossiê') }}</span><input name="nome" maxlength="200"></label>
+    <p class="small muted" id="ajuda-pasta">{{ t('Todos os arquivos da pasta e das subpastas são importados como documentos do dossiê (subpastas conservadas). Arquivos de sistema (Thumbs.db, desktop.ini, .DS_Store) são ignorados.') }}</p>
+    <p class="small muted" id="ajuda-zip" hidden>{{ t('O ZIP é descompactado pela aplicação (subpastas conservadas); somente sua impressão digital é conservada. ZIP protegidos por senha ou com caminhos perigosos são recusados.') }}</p>
+    <p class="small" id="zip-conteudo" hidden></p>
+    <div id="prog" hidden><progress max="100" value="0"></progress> <b class="small" id="prog-p"></b>
+      <div class="small" id="prog-t"></div><div class="small muted" id="prog-w"></div></div>
+    <p class="small err" id="err" hidden></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn alt" type="button" onclick="fechar()">{{ t('Cancelar') }}</button>
+      <button class="btn" type="submit" id="go">{{ t('Criar o dossiê') }}</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-del" class="dlg dlg-danger" aria-labelledby="del-h">
+  <form method="post" id="fdel">
+    <h2 id="del-h" style="margin-top:0">⚠ {{ t('Excluir o dossiê') }} <span id="del-id"></span> ?</h2>
+    <p id="del-nome" class="small muted" style="margin:0"></p>
+    <p><b>{{ t('Atenção: todos os dados deste dossiê serão perdidos definitivamente.') }}</b></p>
+    <ul class="small" style="margin:0;padding-left:18px">
+      <li>{{ t('documentos importados') }} (<span id="del-docs"></span>)</li>
+      <li>{{ t('versões e livrables (relatório PDF, matriz XLSX, mensagens, ZIP de provas)') }} (<span id="del-v"></span>)</li>
+      <li>{{ t('respostas e anexos registrados, métricas e histórico') }}</li>
+      <li>{{ t('salvaguardas automáticas do dossiê') }}</li>
+    </ul>
+    <p class="small">{{ t('Esta ação não pode ser desfeita.') }}</p>
+    <input type="hidden" name="confirmo" id="del-conf">
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn alt" type="button" onclick="document.getElementById('dlg-del').close()" autofocus>{{ t('Cancelar') }}</button>
+      <button class="btn btn-danger" type="submit">{{ t('Excluir definitivamente') }}</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+function pedirExclusao(b){
+  const d = b.dataset;
+  document.getElementById('fdel').action = '/c/' + encodeURIComponent(d.id) + '/excluir';
+  document.getElementById('del-id').textContent = d.id;
+  document.getElementById('del-nome').textContent = d.nome;
+  document.getElementById('del-docs').textContent = d.docs;
+  document.getElementById('del-v').textContent = d.v;
+  document.getElementById('del-conf').value = d.id;
+  document.getElementById('dlg-del').showModal();
+}
+const LIM = {{ lim|tojson }}, T = {{ {
+  'arquivos': t('arquivos'), 'pasta': t('Pasta de origem'), 'envio': t('Envio'), 'grande': t('Arquivo grande demais (máx.)'),
+  'muitos': t('Arquivos demais (máx.)'), 'total': t('Pasta grande demais (máx.)'), 'falha': t('Falha na criação'),
+  'finaliza': t('Gravando o dossiê…'), 'vazia': t('A pasta selecionada está vazia.'), 'lote': t('lote'), 'resta': t('resta ≈'),
+  'nova': t('Nova tentativa automática'), 'retomar': t('Retomar o envio'), 'criar': t('Criar o dossiê'),
+  'retomar_ajuda': t('Os arquivos já recebidos não serão reenviados.'), 'zip': t('Arquivo ZIP'), 'analisar': t('Enviar e analisar o ZIP'),
+  'conteudo': t('Conteúdo do ZIP'), 'subpastas': t('subpastas'), 'ignorados': t('ignorados'),
+  'internos': t('ZIP internos não descompactados (mantidos como peças)'), 'analisando': t('Análise do ZIP…') }|tojson }};
+const IGN = new Set(['thumbs.db','desktop.ini','.ds_store']);
+let files = [], envio = null, modo = 'pasta', analise = null;
+function modoZip(z){
+  modo = z ? 'zip' : 'pasta'; analise = null;
+  document.getElementById('ajuda-pasta').hidden = z; document.getElementById('ajuda-zip').hidden = !z;
+  document.getElementById('zip-conteudo').hidden = true;
+}
+function pickedZip(inp){
+  const z = inp.files[0]; inp.value = '';
+  if(!z) return;
+  if(envio){ envio.cancelar(); envio = null; }
+  files = [z]; modoZip(true);
+  const f = document.getElementById('fnovo'), err = document.getElementById('err'), go = document.getElementById('go');
+  f.elements['nome'].value = z.name.replace(/\.zip$/i, '');
+  document.getElementById('resumo').innerHTML = '<b>' + T.zip + ' :</b> ' + z.name.replace(/</g, '&lt;') + ' · ' + mb(z.size);
+  err.hidden = true;
+  let msg = '';
+  if(!/\.zip$/i.test(z.name)) msg = T.zip + ' ?';
+  else if(z.size > LIM.mb_tot * 1048576) msg = T.total + ' ' + LIM.mb_tot + ' MB';
+  if(msg){ err.textContent = msg; err.hidden = false; }
+  go.disabled = !!msg; go.textContent = T.analisar;
+  document.getElementById('prog').hidden = true; document.getElementById('prog-w').textContent = '';
+  document.getElementById('dlg').showModal();
+}
+function mb(n){return (n/1048576).toLocaleString(undefined,{maximumFractionDigits:1})+' MB'}
+function picked(inp){
+  files = [...inp.files].filter(f => !IGN.has(f.name.toLowerCase()));
+  modoZip(false);
+  const err = document.getElementById('err'); err.hidden = true;
+  if(!inp.files.length) return;
+  const pasta = (inp.files[0].webkitRelativePath || '').split('/')[0];
+  const tot = files.reduce((s,f)=>s+f.size,0);
+  const f = document.getElementById('fnovo');
+  f.elements['nome'].value = pasta;
+  document.getElementById('resumo').innerHTML = '<b>'+T.pasta+' :</b> '+pasta.replace(/</g,'&lt;')+' · '+files.length+' '+T.arquivos+' · '+mb(tot);
+  let msg = '';
+  if(!files.length) msg = T.vazia;
+  else if(files.length > LIM.arq) msg = T.muitos+' '+LIM.arq;
+  else if(tot > LIM.mb_tot*1048576) msg = T.total+' '+LIM.mb_tot+' MB';
+  else { const big = files.find(x=>x.size > LIM.mb_arq*1048576); if(big) msg = T.grande+' '+LIM.mb_arq+' MB : '+big.webkitRelativePath; }
+  if(msg){ err.textContent = msg; err.hidden = false; }
+  document.getElementById('go').disabled = !!msg;
+  document.getElementById('go').textContent = T.criar;
+  document.getElementById('prog').hidden = true;
+  if(envio){ envio.cancelar(); envio = null; }
+  document.getElementById('dlg').showModal();
+  inp.value = '';
+}
+function fechar(){
+  if(envio){ envio.cancelar(); envio = null; }  // envoi en cours ou inachevé : la zone d'attente est effacée
+  document.getElementById('dlg').close(); files = [];
+}
+function mostrar(p){
+  const bar = document.querySelector('#prog progress'), w = document.getElementById('prog-w');
+  if(p.nova){ w.textContent = '⚠ ' + T.nova + ' (' + p.nova + '/2)…'; return; }
+  w.textContent = '';
+  const pct = p.total ? Math.floor(p.bytes * 100 / p.total) : 100;
+  bar.value = pct; document.getElementById('prog-p').textContent = pct + ' %';
+  document.getElementById('prog-t').textContent = envioTexto(p, T);
+}
+async function enviar(ev){
+  ev.preventDefault();
+  const f = ev.target, err = document.getElementById('err'), go = document.getElementById('go');
+  document.getElementById('prog').hidden = false; err.hidden = true; go.disabled = true;
+  try {
+    if(!envio) envio = new Envio(files, x => (modo === 'zip' ? x.name : (x.webkitRelativePath || x.name)), mostrar, modo === 'zip' ? 'zip' : '');
+    if(!envio.pronto) await envio.executar();
+    if(modo === 'zip' && !analise){  // 1er clic : envoi + analyse, le contenu s'affiche ; 2e clic : création
+      document.getElementById('prog-t').textContent = T.analisando;
+      analise = await analisarZip(envio);
+      const c = document.getElementById('zip-conteudo');
+      c.innerHTML = zipTexto(analise, T); c.hidden = false;
+      document.getElementById('prog').hidden = true;
+      go.disabled = false; go.textContent = T.criar;
+      return false;
+    }
+    document.getElementById('prog-t').textContent = T.finaliza;
+    const fd = new FormData();
+    fd.append('id', f.elements['id'].value.trim()); fd.append('nome', f.elements['nome'].value.trim());
+    fd.append('envio', envio.token); fd.append('n', envio.pronto.n); fd.append('bytes', envio.pronto.bytes);
+    const r = await fetch('/dossies', {method: 'POST', body: fd});
+    let j = {}; try { j = await r.json() } catch(e) {}
+    if(r.ok && j.ok){ envio = null; location.href = j.url; return; }
+    if(r.status === 404) envio = null;                  // envoi expiré : tout sera renvoyé
+    else if(r.status === 409 && /Envio/.test(j.detail || '')) envio.pronto = null;  // incomplet : on reprend
+    throw new Error(j.detail || ('HTTP ' + r.status));
+  } catch(e) {
+    if(!envio || !envio.cancelado){
+      err.textContent = T.falha + ' : ' + e.message; err.hidden = false; go.disabled = !!e.zip_recusado;
+      const reprise = envio && !envio.pronto;
+      go.textContent = reprise ? T.retomar : (modo === 'zip' && !analise ? T.analisar : T.criar);
+      document.getElementById('prog-w').textContent = reprise ? T.retomar_ajuda : '';
+    }
+  }
+  return false;
+}
+</script>
+{% endblock %}

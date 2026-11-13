@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ cid }} · {{ t('Diário do agente') }}{% endblock %}
+{% block body %}
+<style>
+.j-grid{display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:14px;align-items:start}
+@media (max-width:900px){.j-grid{grid-template-columns:1fr}}
+.j-runs{display:grid;gap:4px;max-height:70vh;overflow:auto}
+.j-runs a{display:block;padding:8px 10px;border-radius:8px;border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:13px}
+.j-runs a.on{border-color:var(--todo);box-shadow:inset 3px 0 0 var(--todo)}
+.j-runs a small{display:block;color:var(--muted)}
+.j-ctl{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:8px 0 10px;font-size:13px}
+.j-ctl label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.j-ev{border-left:4px solid var(--line);padding:6px 10px;margin:0 0 4px;background:var(--card);border-radius:0 6px 6px 0}
+.j-ev summary{cursor:pointer;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.j-ev summary::-webkit-details-marker{display:none}
+.j-ev .h{font:12px ui-monospace,Consolas,monospace;color:var(--muted);flex:none}
+.j-ev .k{font-weight:700;font-size:12px;flex:none}
+.j-ev .a{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--chip);flex:none}
+.j-ev .r{font-size:13px;overflow-wrap:anywhere}
+.j-ev pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.45 ui-monospace,Consolas,monospace;max-height:420px;overflow:auto;
+  background:var(--zebra);padding:8px;border-radius:6px;margin:6px 0 2px}
+.j-inicio{border-left-color:#6366f1}.j-texto{border-left-color:var(--navy2)}.j-raciocinio{border-left-color:#a78bfa}
+.j-ferramenta{border-left-color:var(--todo)}.j-resultado_ferramenta{border-left-color:#94a3b8}.j-recusa{border-left-color:var(--red);background:rgba(220,38,38,.06)}
+.j-subagente_inicio,.j-subagente_fim{border-left-color:#14b8a6}.j-tarefa_inicio,.j-tarefa_fim{border-left-color:#f59e0b}.j-resultado,.j-fim{border-left-color:var(--green)}
+.j-etapa{border-left-color:var(--line);opacity:.85}
+.j-ok{border-left:4px solid var(--green)}.j-ko{border-left:4px solid var(--red)}
+</style>
+<p class="small"><a href="/c/{{ cid }}">← {{ t('Voltar ao painel do dossiê') }}</a></p>
+<section class="card">
+  <h2 style="margin-top:0">{{ t('Diário completo do agente') }}</h2>
+  <p class="small muted" style="margin-top:0">{{ t('Tudo o que o agente recebeu, escreveu, pediu e obteve, e o que lhe foi recusado. Textos muito longos são truncados (tamanho e impressão digital do texto completo indicados). Contém dados do dossiê: uso interno.') }}</p>
+</section>
+{% set EST = {'em_curso': 'em curso', 'concluido': 'concluída', 'erro': 'falhou', 'parado': 'interrompida', 'simulado': 'simulação'} %}
+<div class="j-grid">
+  <nav class="card j-runs" aria-label="{{ t('Execuções') }}">
+    <b class="small">{{ t('Execuções') }}</b>
+    {% for x in exs %}
+    <a href="/c/{{ cid }}/journal?run={{ x.run|urlencode }}" class="{{ 'on' if x.run == run and versao is none }}">
+      {{ fmt_data(x.inicio) if x.inicio else x.run[:15] }}
+      <small>{{ t(EST.get(x.estado, x.estado)) }}{% if x.versao %} · v{{ x.versao }}{% endif %}{% if x.custo_usd is not none %} · {{ fmt_usd(x.custo_usd) }}{% endif %}{% if x.duracao_s is not none %} · ⏱ {{ fmt_crono(x.duracao_s) }}{% endif %}{% if x.retomada_de %} · {{ t('retomada') }}{% endif %}{% if not x.journal %} · —{% endif %}</small></a>
+    {% else %}<p class="small muted">{{ t('Nenhuma execução do agente neste dossiê.') }}</p>{% endfor %}
+  </nav>
+  <section class="card">
+    {% if versao is not none %}<p class="small" style="margin-top:0"><b>{{ t('Diário congelado com a versão') }} v{{ versao }}</b></p>{% endif %}
+    {% if integridade %}
+      {% if integridade.ok %}<p class="small j-ok" style="padding:4px 10px;margin-top:0">✓ {{ t('Cadeia de impressões digitais verificada') }} · {{ integridade.n }} {{ t('eventos') }}
+        · <a href="/c/{{ cid }}/journal.jsonl?{{ ('versao=' ~ versao) if versao is not none else ('run=' ~ run|urlencode) }}">{{ t('Baixar o diário (.jsonl)') }}</a></p>
+      {% else %}<p class="small j-ko err" style="padding:4px 10px;margin-top:0">⚠ {{ t('Atenção: o diário foi alterado após a escrita (cadeia de impressões digitais rompida no evento') }} {{ integridade.primeira_invalida }}).</p>{% endif %}
+    {% endif %}
+    {% if eventos %}
+    <div class="j-ctl" id="j-ctl">
+      {% for tp in tipos %}<label><input type="checkbox" value="{{ tp }}" {{ '' if tp == 'etapa' and detalhado else 'checked' }}> {{ t(J_ROTULOS.get(tp, tp)) }}</label>{% endfor %}
+      {% if agentes|length > 1 %}<select id="j-ag" aria-label="{{ t('Agente') }}"><option value="">{{ t('Todos os agentes') }}</option>
+        {% for a in agentes %}<option value="{{ a }}">{{ t('agente principal') if a == 'principal' else a|replace('subagente:', t('subagente') ~ ' :') }}</option>{% endfor %}</select>{% endif %}
+      <input type="search" id="j-q" placeholder="{{ t('Filtrar…') }}" aria-label="{{ t('Filtrar…') }}">
+      <span class="small muted" id="j-n"></span>
+    </div>
+    <div id="j-lista">
+    {% for e in eventos %}
+      <details class="j-ev j-{{ e.tipo }}" data-tipo="{{ e.tipo }}" data-agente="{{ e.agente }}">
+        <summary><span class="h">{{ e.hora }}</span><span class="k">{{ t(e.rotulo) }}</span>{% if e.agente != 'principal' %}<span class="a">{{ e.agente|replace('subagente:', t('subagente') ~ ' :') }}</span>{% endif %}<span class="r">{{ e.resumo }}</span></summary>
+        {% if e.corpo %}<pre>{{ e.corpo }}</pre>{% endif %}
+      </details>
+    {% endfor %}
+    </div>
+    {% elif run or versao is not none %}<p>{{ t('Diário não disponível para esta execução (anterior à criação do diário).') }}</p>
+    {% endif %}
+  </section>
+</div>
+<script>
+(function(){
+  const ctl = document.getElementById('j-ctl'); if(!ctl) return;
+  const evs = [...document.querySelectorAll('#j-lista .j-ev')], ag = document.getElementById('j-ag'), q = document.getElementById('j-q');
+  function filtrar(){
+    const tipos = new Set([...ctl.querySelectorAll('input[type=checkbox]:checked')].map(x => x.value));
+    const a = ag ? ag.value : '', txt = q.value.toLowerCase();
+    let n = 0;
+    evs.forEach(e => { const ok = tipos.has(e.dataset.tipo) && (!a || e.dataset.agente === a) && (!txt || e.textContent.toLowerCase().includes(txt));
+      e.hidden = !ok; n += ok; });
+    document.getElementById('j-n').textContent = n + ' / ' + evs.length;
+  }
+  ctl.addEventListener('input', filtrar); filtrar();
+})();
+</script>
+{% endblock %}

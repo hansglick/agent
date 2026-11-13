@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: kyc-compliance-web
+    runtime: docker
+    # 2 Go de mémoire : l'agent (moteur Claude Code + sous-agents), la lecture des PDF et Chromium tournent dans le même service.
+    # Le disque persistant exige un plan payant ; un seul serveur (le disque ne se partage pas entre plusieurs instances).
+    plan: standard
+    numInstances: 1
+    healthCheckPath: /healthz
+    autoDeploy: false        # un déploiement redémarre le service et interrompt une mise à jour en cours : déployer à la main
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: KYC_AGENT_MAX_USD
+        value: "30"
+      - key: APP_USER           # obligatoires : sans eux, l'application refuse de s'afficher sur Render
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: KYC_ANTHROPIC_API_KEY   # clé API de l'application (secret, à saisir dans le dashboard Render)
+        sync: false
+    disk:
+      name: kyc-data
+      mountPath: /data
+      sizeGB: 20             # un dossier analysé occupe 0,2 à 0,7 Go (pièces, images de travail, livrables, sauvegardes)

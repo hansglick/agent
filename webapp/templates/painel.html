@@ -1,0 +1,599 @@
+{% extends "base.html" %}
+{% block title %}{{ cid }} · {{ t('Painel') }}{% endblock %}
+{% block body %}
+{% set M = met %}
+{% set P = pend_agente %}
+{% set ST_CLS = {'preparacao': 'st-prep', 'andamento': 'st-run', 'tratado': 'st-done'} %}
+{% set n_esperados = tarefas_abertas|length + msgs_sem_resposta|length %}
+
+{% if pedido %}{% set ps = pedido.status or {} %}
+{% set NOVO = pedido.estado not in ('solicitado',) and pedido._dir %}
+<h2 class="mx-tab mx-tab-info" id="mx-t0"><button type="button" class="mx-tab-btn" aria-expanded="false" aria-controls="mx-s0"
+  data-sempre-fechada="1"{% if NOVO %} data-run="{{ cid }}/{{ pedido._dir }}"{% endif %}
+  title="{{ t('Recolher / mostrar') }}">{{ t('Última atualização') }}<svg class="mx-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button></h2>
+<section class="mx mx-info pedido pedido-{{ pedido.estado }} small" role="status" aria-labelledby="mx-t0" id="mx-s0">
+  {% if pedido.estado == 'solicitado' %}
+  <b>{{ t('Atualização solicitada') }}</b> — {{ fmt_data(pedido.solicitado_em) }} · {{ pedido.total }} {{ t('documentos aguardando tratamento') }}. {{ t('O agente ainda não começou.') }}
+  {% elif pedido.estado == 'concluido' %}
+  <b>{{ t('Atualização concluída') }}</b> — v{{ ps.versao_produzida }} · {{ fmt_data(ps.fim) }}{% if pedido.modo == 'multi' %} · {{ t('Multiagentes') }} ({{ t('versão beta') }}){% elif pedido.modo == 'agente' %} · {{ t('Agente livre') }}{% endif %}{% if ps.custo_usd is not none %} · {{ fmt_usd(ps.custo_usd) }}{% endif %}. {{ t('Releia e valide a nova versão antes de qualquer envio.') }}
+  {% if ps.resumo %}<details><summary>{{ t('Resumo do agente') }}</summary><div class="small" style="white-space:pre-wrap">{{ ps.resumo }}</div></details>{% endif %}
+  {% elif pedido.estado == 'parado' %}
+  <b>{{ t('Atualização interrompida') }}</b> — {{ fmt_data(ps.fim) }}. {% if ps.revertido %}{{ t('O dossiê foi restaurado no estado anterior à execução; os documentos continuam aguardando tratamento.') }}{% else %}{{ t('Nada foi alterado; os documentos continuam aguardando tratamento.') }}{% endif %}
+  {% elif pedido.estado == 'simulado' %}
+  <b>{{ t('Simulação concluída') }}</b> — {{ fmt_data(ps.fim) }}. {{ t('Nenhuma chave API (KYC_ANTHROPIC_API_KEY) configurada: nenhuma chamada à API, nenhuma versão criada, dossiê inalterado.') }}
+  {% else %}
+  <b>{{ t('Falha da atualização') }}</b> — {{ fmt_data(ps.fim) }} · {{ ps.erro }}. {% if ps.revertido %}{{ t('O dossiê foi restaurado no estado anterior à execução; os documentos continuam aguardando tratamento.') }}{% if ps.reversao and ps.reversao.alteracoes_fora_do_perimetro %} <b>{{ t('Atenção — peças ou respostas existentes modificadas durante a execução (verificar):') }}</b> {{ ps.reversao.alteracoes_fora_do_perimetro|join(', ') }}{% endif %}{% else %}{{ t('Nada foi marcado como tratado; os documentos continuam aguardando.') }}{% endif %}
+  {% endif %}
+  {% if recusas and recusas.run == pedido._dir %}{% set ER = recusas.envios %}
+  <div class="envios-recusados" role="alert">
+    <b>⚠ {{ ER|length }} {{ t('envio(s) de dados recusado(s) ao agente') }}</b> — {{ t('sites fora da lista branca dos sites oficiais') }} :
+    <div class="er-sites">{% for x in recusas.sites %}
+      <span class="er-site"><b>{{ x.site }}</b>
+        {% if x.autorizado %}<span class="er-ok">✓ {{ t('autorizado') }}</span>
+        {% elif x.explicito %}<button class="btn alt btn-sm" type="button" onclick="autorizarSite({{ x.site|tojson }})">{{ t('Autorizar este site') }}</button>{% endif %}</span>
+    {% endfor %}</div>
+    {% if recusas.relancavel and not agente.ativo and status_dossie != 'tratado' %}
+    <form method="post" action="/c/{{ cid }}/atualizar" style="margin:8px 0 0">
+      {% if retomada and retomada.run == pedido._dir %}<input type="hidden" name="retomar" value="{{ retomada.run }}">{% endif %}
+      <input type="hidden" name="reconsultar" value="{{ recusas.run }}">
+      <button class="btn btn-run" type="submit">{{ t('Retomar a atualização') if retomada and retomada.run == pedido._dir else t('Relançar as consultas bloqueadas') }}</button>
+      <span class="small" style="color:#9a9a9a">{{ t('O agente refaz as consultas dos sites autorizados e integra os resultados numa nova versão.') }}</span>
+    </form>{% endif %}
+    <details><summary>{{ t('Detalhe e o que fazer') }}</summary>
+      <ul>{% for e in ER %}<li><span class="mono">{{ fmt_data(e.em) }}</span> · {{ e.sites|join(', ') }} · {{ e.ferramenta }}{% if e.agente and e.agente != 'principal' %} ({{ e.agente }}){% endif %}
+        <div class="mono small" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#9a9a9a">{{ e.trecho }}</div></li>{% endfor %}</ul>
+      <p class="small">{{ t('Se for um site oficial legítimo, autorize-o (botão acima, motivo obrigatório) e relance as consultas bloqueadas. Caso contrário, nada a fazer: a consulta correspondente aparece como tarefa humana.') }}</p>
+    </details>
+  </div>
+  <dialog id="dlg-site" class="dlg dlg-dark" aria-labelledby="site-h">
+    <form method="post" action="/c/{{ cid }}/lista-branca">
+      <h2 id="site-h" style="margin-top:0">{{ t('Autorizar este site') }}</h2>
+      <p class="small" style="color:#c8c8c8">{{ t('O agente poderá enviar dados a este site (formulário, API) em todos os dossiês. Autorize apenas um site oficial necessário a um controle.') }}</p>
+      <p><b id="site-nome"></b></p>
+      <input type="hidden" name="dominio" id="site-dom"><input type="hidden" name="run" value="{{ recusas.run }}">
+      <label class="fld"><span>{{ t('Motivo (obrigatório)') }}</span><input name="motivo" required maxlength="300"
+        placeholder="{{ t('ex.: portal oficial de verificação de certidões da prefeitura') }}"></label>
+      <div class="row" style="justify-content:flex-end;margin-top:12px;gap:8px">
+        <button class="btn alt" type="button" onclick="this.closest('dialog').close()">{{ t('Cancelar') }}</button>
+        <button class="btn btn-run" type="submit">{{ t('Autorizar') }}</button>
+      </div>
+    </form>
+  </dialog>
+  <script>function autorizarSite(s){ document.getElementById('site-nome').textContent = s; document.getElementById('site-dom').value = s;
+    document.getElementById('dlg-site').showModal(); }</script>
+  {% endif %}
+  {% if retomada and retomada.run == pedido._dir %}<div style="margin-top:4px"><b>{{ t('O trabalho do agente foi guardado: você pode retomar a atualização.') }}</b></div>{% endif %}
+  {% if pedido._dir and pedido.estado != 'solicitado' %}<div style="margin-top:4px">{% if ps.duracao_s is defined and ps.duracao_s is not none %}{{ t('Duração do trabalho do agente') }} : {{ fmt_crono(ps.duracao_s) }} · {% endif %}<a href="/c/{{ cid }}/journal?run={{ pedido._dir|urlencode }}">{{ t('Diário completo do agente') }} →</a></div>{% endif %}
+</section>{% endif %}
+{% set TRATADO = status_dossie == 'tratado' %}
+{% if TRATADO %}<div class="card pedido pedido-concluido small" role="status">
+  <b>{{ t('Dossiê concluído') }}</b> — {{ t('validado por') }} {{ meta.tratado_por }} · {{ fmt_data(meta.tratado_em) }}.
+  {{ t('Para atualizá-lo ou retomar a análise, reabra o dossiê.') }}
+  <button class="btn alt" type="button" style="margin-left:8px" onclick="document.getElementById('dlg-hdr-status').showModal()">{{ t('Reabrir o dossiê') }}</button>
+</div>{% endif %}
+<h2 class="mx-tab" id="mx-t1"><button type="button" class="mx-tab-btn" aria-expanded="true" aria-controls="mx-s1"
+  title="{{ t('Recolher / mostrar') }}">{{ t('Preparação') }}<svg class="mx-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button></h2>
+<section class="mx" aria-labelledby="mx-t1" id="mx-s1">
+  {# (1) agent #}
+  {% set PODE = (P.total or requete) and not agente.ativo and not TRATADO %}
+  <div class="mx-tile mx-1 {{ 'is-off' if not (P.total or requete) or agente.ativo or TRATADO }}">
+    <div class="mx-main mx-static">
+      <svg class="mx-ico mx-ico-xl" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M32 6v7"/><circle cx="32" cy="5" r="2.2" fill="currentColor"/>
+        <rect x="12" y="13" width="40" height="30" rx="9"/><circle cx="24" cy="28" r="4"/><circle cx="40" cy="28" r="4"/>
+        <path d="M26 37h12"/><path d="M6 24v10M58 24v10"/><path d="M20 43v6a5 5 0 0 0 5 5h14a5 5 0 0 0 5-5v-6"/></svg>
+      {% if TRATADO %}<span class="mx-sub mx-sub-gris">{{ t('Dossiê concluído: reabra-o para atualizá-lo') }}</span>{% endif %}
+      <div class="cta-row">
+        <span class="cta-wrap">
+          {% if retomada and not agente.ativo and not TRATADO %}
+          <button class="mx-cta" type="button" id="btn-atualizar" onclick="document.getElementById('dlg-retomar').showModal()">{{ t('Retomar a atualização') }}</button>
+          {% else %}
+          <button class="mx-cta" type="button" id="btn-atualizar" {% if PODE %}onclick="document.getElementById('dlg-agent').showModal()"{% else %}disabled{% endif %}
+            aria-label="{{ t('Atualizar o dossiê') }} — {{ P.total }} {{ t('documentos aguardando tratamento') }}">{{ t('Atualizar o dossiê') }}</button>
+          {% endif %}
+          {% if P.total %}<span class="cta-badge cta-n" id="cta-n" tabindex="0" role="img" aria-label="{{ P.total }} {{ t('documentos aguardando tratamento') }}" data-tip="{{ P.total }} {{ t('documentos aguardando tratamento') }}">{{ P.total }}</span>{% endif %}
+          {% if requete %}<button class="cta-badge cta-r" type="button" id="cta-r" onclick="document.getElementById('dlg-requete-ver').showModal()"
+            title="{{ t('Requisição de atualização') }}" aria-label="{{ t('Requisição de atualização') }}">R</button>{% endif %}
+          {# juste sous le bouton « Mettre à jour le dossier », même largeur et même hauteur #}
+          <button class="mx-stop" id="btn-parar" type="button" {{ 'hidden' if not agente.ativo }} {{ 'disabled' if agente.parada_pedida }}
+            onclick="document.getElementById('dlg-parar').showModal()" aria-label="{{ t('Pausar os agentes') }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+            <span id="btn-parar-t">{{ t('Pausa solicitada…') if agente.parada_pedida else t('Pausar') }}</span>
+          </button>
+        </span>
+        <button class="cta-pencil" type="button" id="btn-requete" {{ 'disabled' if agente.ativo or TRATADO }}
+          onclick="document.getElementById('dlg-requete').showModal()" title="{{ t('Requisição de atualização') }}" aria-label="{{ t('Requisição de atualização') }}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  {# (2) pièces du dossier #}
+  <div class="mx-tile mx-2" data-plus>
+    <a class="mx-main mx-row" href="/c/{{ cid }}/documentos">
+      <svg class="mx-ico" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round">
+        <path d="M6 26v36h28" opacity=".5"/><path d="M12 20v36h28" opacity=".75"/>
+        <path d="M18 14h22l8 8v28H18z" fill="#000"/><path d="M40 14v8h8"/><path d="M25 32h16M25 39h16M25 46h10"/></svg>
+      <span class="mx-txt"><span class="mx-title">{{ n_docs or 0 }} {{ t('peças do dossiê') }}</span></span>
+    </a>
+    <button class="mx-plus on" type="button" onclick="menuPlus(this)" aria-haspopup="menu" aria-expanded="false" title="{{ t('Adicionar peças ao dossiê') }}" aria-label="{{ t('Adicionar peças ao dossiê') }}">+</button>
+    <div class="plus-menu" role="menu" hidden>
+      <button type="button" role="menuitem" onclick="fecharMenus();document.getElementById('add-docs').click()"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/></svg>{{ t('Adicionar arquivos') }}</button>
+      <button type="button" role="menuitem" onclick="fecharMenus();document.getElementById('add-zip').click()"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 2h9l5 5v15H6z"/><path d="M11 4h2M11 7h2M11 10h2M11 13h2"/><rect x="10" y="15" width="4" height="4" rx="1"/></svg>{{ t('Adicionar um arquivo ZIP') }}</button>
+    </div>
+    <input id="add-docs" type="file" multiple hidden onchange="addDocs(this)">
+    <input id="add-zip" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden onchange="addZip(this)">
+    <div class="mx-prog" id="add-prog" hidden><progress max="100" value="0"></progress> <span id="add-t"></span>
+      <span id="add-w" class="small"></span> <button class="btn alt" type="button" id="add-retry" hidden onclick="addDocs(null)">{{ t('Retomar o envio') }}</button></div>
+  </div>
+
+  {# (3) documents attendus par l'agent #}
+  <div class="mx-tile mx-3">
+    <div class="mx-main mx-row">
+      <span class="mx-ico-wrap">
+        <svg class="mx-ico" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 38l7-22h34l7 22v14H8z"/><path d="M8 38h14l3 6h14l3-6h14"/><path d="M32 6v20M25 19l7 7 7-7"/></svg>
+        {% if n_esperados %}<span class="mx-badge">{{ n_esperados }}</span>{% endif %}
+      </span>
+      <span class="mx-txt"><span class="mx-title">{{ t('Documentos aguardados pelo agente') }}</span>
+        <span class="mx-sub">{{ tarefas_abertas|length }} {{ t('verificações') }} · {{ msgs_sem_resposta|length }} {{ t('respostas a mensagens') }}</span></span>
+    </div>
+    <button class="mx-plus {{ 'on' if n_esperados }}" type="button" {% if n_esperados %}onclick="document.getElementById('dlg-esperados').showModal()"{% else %}disabled{% endif %}
+      title="{{ t('Ver os documentos aguardados') }}" aria-label="{{ t('Ver os documentos aguardados') }}">+</button>
+  </div>
+</section>
+
+{# ---------------- matrice 2 : cerveau / tokens / facture ---------------- #}
+{% set A = agente %}
+{% set DEMO = request.query_params.get('demo') == 'cerebro' and not A.ativo %}
+<h2 class="mx-tab" id="mx-t2"><button type="button" class="mx-tab-btn" aria-expanded="true" aria-controls="mx-agente"
+  title="{{ t('Recolher / mostrar') }}">{{ t('Atividade') }}<svg class="mx-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg></button></h2>
+<section class="mx" aria-labelledby="mx-t2" id="mx-agente">
+  <div class="mx-tile mx-1 brain-tile {{ 'is-on' if A.ativo or DEMO else 'is-off' }}" id="brain-tile">
+    <span class="brain-crono" id="brain-crono" data-s="{{ A.decorrido_s if A.ativo else '' }}" {{ 'hidden' if not A.ativo }}
+      title="{{ t('Tempo de trabalho do agente nesta atualização') }}" aria-label="{{ t('Tempo de trabalho do agente nesta atualização') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/></svg>
+      <b id="brain-crono-t">{{ fmt_crono(A.decorrido_s) if A.ativo else '' }}</b></span>
+    <span class="brain-usd" id="run-usd" title="{{ t('Custo da atualização em curso') }}">{% if A.ativo %}{{ A.run_usd }}{% endif %}</span>
+    <div class="mx-main">
+      <span class="brain-pct" id="brain-pct" title="{{ A.progresso_det if A.ativo else '' }}">{{ A.progresso if A.ativo else '' }}</span>
+      <svg class="mx-ico mx-ico-xl brain-svg" viewBox="-14 -10 92 84" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M31 10a7 7 0 0 0-12.6 2.4A7.5 7.5 0 0 0 10 21a8 8 0 0 0-2 12.5A8 8 0 0 0 13 46a8 8 0 0 0 9 7 6.5 6.5 0 0 0 9-1.5z"/>
+        <path d="M33 10a7 7 0 0 1 12.6 2.4A7.5 7.5 0 0 1 54 21a8 8 0 0 1 2 12.5A8 8 0 0 1 51 46a8 8 0 0 1-9 7 6.5 6.5 0 0 1-9-1.5z"/>
+        <path d="M32 10v42"/><path d="M19 22c3 0 5 2 5 5M14 34c4-1 7 1 8 4M22 46c0-3 2-5 5-5"/>
+        <path d="M45 22c-3 0-5 2-5 5M50 34c-4-1-7 1-8 4M42 46c0-3-2-5-5-5"/>
+        <g class="sparks" stroke="none" fill="currentColor">
+          <path class="bolt b1" d="M2 -2l-6 10h5l-4 9 10-12h-5l4-7z"/>
+          <path class="bolt b2" d="M64 0l-5 9h5l-4 8 9-11h-5l3-6z"/>
+          <path class="bolt b3" d="M-6 44l-5 8h4l-3 7 8-10h-4l3-5z"/>
+          <path class="bolt b4" d="M70 40l-5 8h4l-3 7 8-10h-4l3-5z"/>
+          <path class="bolt b5" d="M33 -9l-4 7h4l-3 6 7-8h-4l2-5z"/>
+        </g>
+        <g class="synapses" stroke-width="2.2">
+          <path class="syn s1" d="M17 15l4 4-3 3 5 4"/>
+          <path class="syn s2" d="M47 15l-4 4 3 3-5 4"/>
+          <path class="syn s3" d="M12 41l5-2 2 4 5-2"/>
+          <path class="syn s4" d="M52 41l-5-2-2 4-5-2"/>
+          <path class="syn s5" d="M32 20v6l-3 3 3 3v6"/>
+        </g>
+        <g class="neurons" stroke="none" fill="currentColor">
+          <circle class="n n1" cx="21" cy="19" r="1.8"/><circle class="n n2" cx="43" cy="30" r="1.8"/>
+          <circle class="n n3" cx="19" cy="40" r="1.8"/><circle class="n n4" cx="45" cy="44" r="1.8"/>
+        </g>
+      </svg>
+      <span class="brain-agents" id="brain-agents">{{ A.agentes if A.ativo else '' }}</span>
+      <span class="brain-log">
+        <a class="brain-journal" href="/c/{{ cid }}/journal" id="brain-journal" title="{{ t('Diário completo do agente') }}" aria-label="{{ t('Diário completo do agente') }}">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 3h12a2 2 0 0 1 2 2v16H7a2 2 0 0 1-2-2z"/><path d="M5 19a2 2 0 0 1 2-2h12"/><path d="M9 7h6M9 11h6"/></svg></a>
+        <span class="brain-task" id="brain-task" aria-live="polite">{{ A.tarefa if A.ativo else (t('Demonstração da animação — nenhuma atualização real em curso') if DEMO else t('Nenhuma atualização em curso')) }}</span>
+      </span>
+      <span class="brain-tok" id="brain-tok">
+        <span>{{ t('Entrada') }} <b id="run-in">{{ A.run_in if A.ativo else '—' }}</b></span>
+        <span>{{ t('Saída') }} <b id="run-out">{{ A.run_out if A.ativo else '—' }}</b></span>
+      </span>
+    </div>
+  </div>
+
+  <div class="mx-tile mx-2">
+    <div class="mx-main mx-row mx-tok">
+      <svg class="mx-ico" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="24" cy="14" rx="16" ry="6"/><path d="M8 14v8c0 3.3 7.2 6 16 6s16-2.7 16-6v-8"/>
+        <path d="M8 22v8c0 3.3 7.2 6 16 6 2 0 4-.1 5.8-.4"/><path d="M8 30v8c0 3.3 7.2 6 16 6 2 0 4-.1 5.8-.4"/>
+        <circle cx="44" cy="44" r="14"/><path d="M38 38h12M44 38v14"/></svg>
+      <div class="sum">
+        <span>{{ t('Entrada') }}</span><b id="p-in">{{ A.p_in }}</b>
+        <span>{{ t('Saída') }}</span><b id="p-out">{{ A.p_out }}</b>
+        <hr aria-hidden="true">
+        <span></span><b class="sum-tot" id="p-tot" aria-label="{{ t('Total') }}">{{ A.p_tot }}</b>
+      </div>
+    </div>
+    <button class="mx-curve" type="button" onclick="document.getElementById('dlg-tokens').showModal()"
+      title="{{ t('Tokens por atualização') }}" aria-label="{{ t('Tokens por atualização') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 20h18"/><path d="M4 16l5-6 4 3 7-8"/><circle cx="20" cy="5" r="1.4" fill="currentColor"/></svg></button>
+  </div>
+
+  <div class="mx-tile mx-3">
+    <div class="mx-main mx-row">
+      <svg class="mx-ico" viewBox="0 0 64 64" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="32" cy="32" r="24"/><path d="M40 23c-1.5-2.6-4.6-4-8-4-4.7 0-8 2.6-8 6.2 0 8.6 16 4.6 16 13.4 0 3.6-3.6 6.4-8 6.4-3.6 0-6.8-1.5-8.4-4.2"/>
+        <path d="M32 14v5M32 45v5"/></svg>
+      <span class="mx-count bill" id="p-usd">{{ A.p_usd }}</span>
+    </div>
+    <button class="mx-curve" type="button" onclick="document.getElementById('dlg-fatura').showModal()"
+      title="{{ t('Fatura por atualização') }}" aria-label="{{ t('Fatura por atualização') }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 20h18"/><path d="M4 16l5-6 4 3 7-8"/><circle cx="20" cy="5" r="1.4" fill="currentColor"/></svg></button>
+  </div>
+</section>
+
+
+
+{# fenêtre (1) : ce que l'agent traitera #}
+<dialog id="dlg-agent" class="dlg dlg-dark dlg-run" aria-labelledby="ag-h">
+  <form method="post" action="/c/{{ cid }}/atualizar">
+    <h2 id="ag-h" style="margin-top:0">{{ t('Atualizar o dossiê') }}</h2>
+    <p class="small" style="margin-top:0;color:#c8c8c8">{{ P.total }} {{ t('documentos aguardando tratamento') }}
+      ({{ P.n_docs }} {{ t('peças') }} · {{ P.n_ver }} {{ t('verificações') }} · {{ P.n_msg }} {{ t('mensagens') }})</p>
+    {% if requete %}<p class="small" style="color:#c8c8c8;margin:6px 0 0"><b style="color:#22c55e">R</b> {{ t('Requisição de atualização') }} :
+      <span style="color:#9a9a9a;white-space:pre-wrap">{{ requete.texto[:300] }}{{ '…' if requete.texto|length > 300 }}</span></p>{% endif %}
+    <fieldset class="modo-run"><legend>{{ t('Modo de trabalho') }}</legend>
+      <label><input type="radio" name="modo" value="agente" checked> <b>{{ t('Agente livre') }}</b>
+        <span>{{ t('O agente decide sozinho se reparte o trabalho entre subagentes, e quantos. Comportamento comprovado.') }}</span></label>
+      <label><input type="radio" name="modo" value="multi"> <b>{{ t('Multiagentes') }}</b> <i class="beta">{{ t('versão beta') }}</i>
+        <span>{{ t('O agente principal reparte leitura das peças, screening por parte e verificações de autenticidade entre subagentes especializados em paralelo, depois consolida. Mais rápido; custo um pouco maior.') }}</span></label>
+    </fieldset>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn alt" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-run" type="submit">Run</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-requete" class="dlg dlg-dark dlg-run" aria-labelledby="rq-h">
+  <form method="post" action="/c/{{ cid }}/requete">
+    <h2 id="rq-h" style="margin-top:0">{{ t('Requisição de atualização') }}</h2>
+    <p class="small" style="margin-top:0;color:#9a9a9a">{{ t('Descreva o que o agente deve fazer na próxima atualização; ela produzirá uma nova versão do dossiê.') }}</p>
+    <textarea class="rq-txt" name="texto" id="rq-texto" rows="7" maxlength="4000" required>{{ requete.texto if requete }}</textarea>
+    <div class="row" style="justify-content:flex-end;margin-top:12px;gap:8px">
+      <button class="btn alt" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-run" type="submit">Send</button>
+    </div>
+  </form>
+</dialog>
+{% if requete %}
+<dialog id="dlg-requete-ver" class="dlg dlg-dark dlg-run" aria-labelledby="rqv-h">
+  <h2 id="rqv-h" style="margin-top:0">{{ t('Requisição de atualização') }}</h2>
+  <p class="small" style="margin-top:0;color:#9a9a9a">{{ requete.por }} · {{ fmt_data(requete.em) }}</p>
+  <div class="rq-ver">{{ requete.texto }}</div>
+  {% if agente.ativo %}<p class="small" style="color:#9a9a9a">{{ t('Em tratamento pela atualização em curso.') }}</p>{% endif %}
+  <div class="row" style="justify-content:flex-end;margin-top:12px;gap:8px">
+    <form method="post" action="/c/{{ cid }}/requete/apagar" style="margin:0">
+      <button class="btn alt" type="submit" {{ 'disabled' if agente.ativo }}>Delete the request</button></form>
+    <button class="btn btn-run" type="button" onclick="this.closest('dialog').close()">Done</button>
+  </div>
+</dialog>
+{% endif %}
+
+{% if retomada %}
+<dialog id="dlg-retomar" class="dlg dlg-dark dlg-run" aria-labelledby="ret-h">
+  <h2 id="ret-h" style="margin-top:0">{{ t('Retomar a atualização') }}</h2>
+  <p class="small" style="margin-top:0;color:#c8c8c8">{{ t('A atualização anterior parou') }} ({{ fmt_data(retomada.em) }}) :
+    <span style="color:#9a9a9a">{{ retomada.motivo[:220] }}</span></p>
+  <p class="small" style="color:#c8c8c8">{{ t('O trabalho já feito pelo agente foi guardado') }} ({{ t('duração') }} : {{ fmt_crono(retomada.duracao_s) }}).
+    {{ t('Retomar: o agente reencontra seu trabalho e sua conversa e continua de onde parou. Recomeçar: o trabalho guardado é descartado e o agente recomeça do zero.') }}</p>
+  <p class="small" style="color:#9a9a9a">{{ P.total }} {{ t('documentos aguardando tratamento') }}</p>
+  <div class="row" style="justify-content:flex-end;margin-top:14px;gap:8px">
+    <button class="btn alt" type="button" onclick="this.closest('dialog').close()">{{ t('Cancelar') }}</button>
+    <form method="post" action="/c/{{ cid }}/atualizar" style="margin:0"><button class="btn alt" type="submit">{{ t('Recomeçar do zero') }}</button></form>
+    <form method="post" action="/c/{{ cid }}/atualizar" style="margin:0"><input type="hidden" name="retomar" value="{{ retomada.run }}">
+      <button class="btn btn-run" type="submit">{{ t('Retomar') }}</button></form>
+  </div>
+</dialog>
+{% endif %}
+
+<dialog id="dlg-zip" class="dlg" aria-labelledby="zip-h">
+  <form method="dialog" onsubmit="return addZipEnviar(event)">
+    <h2 id="zip-h" style="margin-top:0">{{ t('Adicionar um arquivo ZIP') }}</h2>
+    <p class="small" id="zip-resumo"></p>
+    <p class="small muted">{{ t('O ZIP é descompactado pela aplicação (subpastas conservadas); somente sua impressão digital é conservada. ZIP protegidos por senha ou com caminhos perigosos são recusados.') }}</p>
+    <p class="small" id="zip-cont" hidden></p>
+    <div id="zip-prog" hidden><progress max="100" value="0"></progress> <b class="small" id="zip-p"></b>
+      <div class="small" id="zip-t"></div><div class="small muted" id="zip-w"></div></div>
+    <p class="small err" id="zip-err" hidden></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn alt" type="button" onclick="addZipFechar()">{{ t('Cancelar') }}</button>
+      <button class="btn" type="submit" id="zip-go">{{ t('Enviar e analisar o ZIP') }}</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-parar" class="dlg dlg-dark dlg-run" aria-labelledby="par-h">
+  <form method="post" action="/c/{{ cid }}/parar">
+    <h2 id="par-h" style="margin-top:0">{{ t('Pausar os agentes') }}</h2>
+    <p class="small" style="color:#c8c8c8">{{ t('O dossiê será restaurado no estado anterior à execução e os documentos continuarão aguardando tratamento. O trabalho já feito pelo agente é guardado: você poderá retomar a atualização. Os tokens já consumidos permanecem faturados.') }}</p>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">
+      <button class="btn alt" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-run" type="submit">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-tokens" class="dlg dlg-wide dlg-dark" aria-labelledby="tok-h">
+  <h2 id="tok-h" style="margin-top:0">{{ t('Tokens por atualização') }}</h2>
+  {% if graf_tokens %}
+    {{ graf_tokens }}
+    <details class="small" style="margin-top:8px"><summary>{{ t('Tabela') }}</summary>
+      <table class="tbl"><tr><th>{{ t('Versão') }}</th><th>{{ t('Início') }}</th><th>{{ t('Duração') }}</th><th>{{ t('Entrada') }}</th><th>{{ t('Saída') }}</th><th>{{ t('Total') }}</th></tr>
+      {% for p in serie_versoes %}<tr><td>{{ p.rotulo }}{% if p.falha %} <span class="small" style="color:#9a9a9a">({{ t('tentativa sem versão') }})</span>{% endif %}</td><td>{{ fmt_data(p.inicio) }}</td><td>{{ fmt_crono(p.duracao_s) }}</td><td>{{ fmt_int(p.entrada) }}</td><td>{{ fmt_int(p.saida) }}</td><td>{{ fmt_int(p.total) }}</td></tr>{% endfor %}
+      </table></details>
+  {% else %}
+    <p class="mx-empty">{{ t('Nenhuma atualização medida até agora. O gráfico aparecerá a partir da primeira atualização feita pelo agente ligado à aplicação.') }}</p>
+  {% endif %}
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn alt" type="button" onclick="this.closest('dialog').close()">{{ t('Fechar') }}</button></div>
+</dialog>
+
+<dialog id="dlg-fatura" class="dlg dlg-wide dlg-dark" aria-labelledby="fat-h">
+  <h2 id="fat-h" style="margin-top:0">{{ t('Fatura por atualização') }}</h2>
+  {% if graf_custo %}
+    {{ graf_custo }}
+    <details class="small" style="margin-top:8px"><summary>{{ t('Tabela') }}</summary>
+      <table class="tbl"><tr><th>{{ t('Versão') }}</th><th>{{ t('Início') }}</th><th>{{ t('Duração') }}</th><th>{{ t('Entrada') }}</th><th>{{ t('Saída') }}</th><th>{{ t('Total') }}</th><th>US$</th></tr>
+      {% for p in serie_versoes %}<tr><td>{{ p.rotulo }}{% if p.falha %} <span class="small" style="color:#9a9a9a">({{ t('tentativa sem versão') }})</span>{% endif %}</td><td>{{ fmt_data(p.inicio) }}</td><td>{{ fmt_crono(p.duracao_s) }}</td><td>{{ fmt_int(p.entrada) }}</td><td>{{ fmt_int(p.saida) }}</td><td>{{ fmt_int(p.total) }}</td><td>{{ fmt_usd(p.custo) }}</td></tr>{% endfor %}
+      </table></details>
+  {% else %}
+    <p class="mx-empty">{{ t('Nenhuma atualização medida até agora. O gráfico aparecerá a partir da primeira atualização feita pelo agente ligado à aplicação.') }}</p>
+  {% endif %}
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn alt" type="button" onclick="this.closest('dialog').close()">{{ t('Fechar') }}</button></div>
+</dialog>
+
+{# fenêtre (3) : split tâches / messages #}
+<dialog id="dlg-esperados" class="dlg dlg-wide" aria-labelledby="esp-h">
+  <h2 id="esp-h" style="margin-top:0">{{ t('Documentos aguardados pelo agente') }}</h2>
+  <div class="split">
+    <section>
+      <h3>{{ t('Verificações que o agente não pôde realizar') }} <span class="mx-badge mx-badge-s">{{ tarefas_abertas|length }}</span></h3>
+      {% for it in tarefas_abertas %}<a class="split-item" href="{{ base }}verificacoes#{{ it.id }}"><span class="chip">{{ it.id }}</span> {{ it.controle }}</a>
+      {% else %}<p class="small muted">{{ t('Nenhuma.') }}</p>{% endfor %}
+    </section>
+    <section>
+      <h3>{{ t('Respostas a mensagens') }} <span class="mx-badge mx-badge-s">{{ msgs_sem_resposta|length }}</span></h3>
+      {% for m in msgs_sem_resposta %}<a class="split-item" href="{{ base }}mensagens#{{ m.id }}"><span class="chip">{{ m.id }}</span> {{ t('Resposta aguardada de') }} {{ m.destinatario }}</a>
+      {% else %}<p class="small muted">{{ t('Nenhuma.') }}</p>{% endfor %}
+    </section>
+  </div>
+  <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn alt" type="button" onclick="this.closest('dialog').close()">{{ t('Fechar') }}</button></div>
+</dialog>
+
+<script>
+/* Compteurs qui défilent : la valeur affichée (déjà formatée par le serveur, ex. « 174 700 », « 0,22 $ », « US$ 1.234,50 »)
+   est décomposée en texte + nombre ; le nombre défile rapidement de l'ancienne à la nouvelle valeur avec le même format. */
+const ROULEAU_CALME = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function rouleauPartes(s){
+  const m = String(s).match(/^(.*?)(\d(?:[\d\s\u00a0\u202f.,]*\d)?)(\D*)$/);
+  if(!m) return null;
+  const num = m[2], dec = num.match(/[.,](\d{1,2})$/);
+  const inteiro = dec ? num.slice(0, -dec[0].length) : num;
+  const sep = (inteiro.match(/[^\d]/) || [''])[0];
+  const casas = dec ? dec[1].length : 0;
+  const valor = parseInt(inteiro.replace(/\D/g, '') || '0', 10) + (dec ? parseInt(dec[1], 10) / Math.pow(10, casas) : 0);
+  return {pre: m[1], pos: m[3], valor, casas, sep, sepDec: dec ? dec[0][0] : ''};
+}
+function rouleauTexto(f, v){
+  const fixo = v.toFixed(f.casas), [i, d] = fixo.split('.');
+  const milhar = f.sep ? i.replace(/\B(?=(\d{3})+(?!\d))/g, f.sep) : i;
+  return f.pre + milhar + (f.casas ? f.sepDec + d : '') + f.pos;
+}
+function rouler(el, novo, duree){
+  if(!el) return;
+  novo = String(novo);
+  const alvo = rouleauPartes(novo), atual = rouleauPartes(el.dataset.alvo || el.textContent);
+  if(el._rouleau) cancelAnimationFrame(el._rouleau);
+  el.dataset.alvo = novo;
+  if(ROULEAU_CALME || !alvo){ el.textContent = novo; return; }
+  const de = atual ? atual.valor : 0, ate = alvo.valor;
+  if(de === ate){ el.textContent = novo; return; }
+  const t0 = performance.now(), d = duree || 900;
+  el.classList.add('rouleau-on');
+  const passo = agora => {
+    const k = Math.min(1, (agora - t0) / d), e = 1 - Math.pow(1 - k, 3);  // départ rapide, arrivée en douceur
+    el.textContent = k < 1 ? rouleauTexto(alvo, de + (ate - de) * e) : novo;
+    if(k < 1) el._rouleau = requestAnimationFrame(passo); else { el._rouleau = null; el.classList.remove('rouleau-on'); }
+  };
+  el._rouleau = requestAnimationFrame(passo);
+}
+// à l'ouverture de la page : les compteurs partent de zéro
+document.addEventListener('DOMContentLoaded', () => {
+  ['run-in', 'run-out', 'run-usd', 'p-in', 'p-out', 'p-tot', 'p-usd'].forEach(id => {
+    const el = document.getElementById(id); if(!el) return;
+    const v = el.textContent.trim(), f = rouleauPartes(v);
+    if(!f || !f.valor) return;
+    el.dataset.alvo = rouleauTexto(f, 0); el.textContent = el.dataset.alvo;
+    rouler(el, v, 1200);
+  });
+});
+(function(){
+  const url = '/c/{{ cid }}/agente.json', NADA = {{ t('Nenhuma atualização em curso')|tojson }};
+  const $ = id => document.getElementById(id);
+  let ativo = {{ 'true' if A.ativo else 'false' }};
+  // chronomètre : temps de travail de l'agent (exécutions reprises comprises), affiché à la seconde
+  let cronoBase = null, cronoT0 = 0;
+  function cronoTexto(s){
+    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, d = n => String(n).padStart(2, '0');
+    return h ? h + ' h ' + d(m) + ' min ' + d(x) + ' s' : (m ? m + ' min ' + d(x) + ' s' : x + ' s');
+  }
+  function crono(s){
+    const el = $('brain-crono');
+    if(s === null || s === undefined || s === ''){ cronoBase = null; el.hidden = true; return; }
+    cronoBase = Number(s); cronoT0 = performance.now(); el.hidden = false;
+    $('brain-crono-t').textContent = cronoTexto(cronoBase);
+  }
+  setInterval(() => { if(cronoBase !== null) $('brain-crono-t').textContent = cronoTexto(cronoBase + Math.floor((performance.now() - cronoT0) / 1000)); }, 1000);
+  crono($('brain-crono').dataset.s);
+  async function tick(){
+    try {
+      const r = await (await fetch(url, {cache: 'no-store'})).json();
+      $('brain-tile').classList.toggle('is-on', r.ativo); $('brain-tile').classList.toggle('is-off', !r.ativo);
+      $('brain-task').textContent = r.ativo ? (r.tarefa || '…') : NADA;
+      $('brain-agents').textContent = r.ativo ? (r.agentes || '') : '';
+      $('brain-pct').textContent = r.ativo ? (r.progresso || '') : ''; $('brain-pct').title = r.ativo ? (r.progresso_det || '') : '';
+      $('btn-parar').hidden = !r.ativo; $('btn-parar').disabled = !!r.parada_pedida;
+      $('btn-parar-t').textContent = r.parada_pedida ? {{ t('Pausa solicitada…')|tojson }} : {{ t('Pausar')|tojson }};
+      const dur = r.ativo ? 1700 : 900;  // pendant une mise à jour (relevé toutes les 2 s) les chiffres défilent en continu
+      crono(r.ativo ? r.decorrido_s : null);
+      rouler($('run-in'), r.ativo ? r.run_in : '—', dur); rouler($('run-out'), r.ativo ? r.run_out : '—', dur);
+      rouler($('run-usd'), r.ativo ? r.run_usd : '', dur);
+      ['p_in','p_out','p_tot','p_usd'].forEach(k => rouler($(k.replace('_','-')), r[k], dur));
+      if (ativo && !r.ativo) { location.reload(); return; }  // fin d'exécution : bandeau de résultat + nouvelle version
+      ativo = r.ativo;
+    } catch(e) {}
+    setTimeout(tick, ativo ? 2000 : 15000);  // temps réel pendant une mise à jour, veille légère sinon
+  }
+  {% if not DEMO %}setTimeout(tick, ativo ? 2000 : 15000);{% endif %}
+})();
+const TA = {{ {'envio': t('Envio'), 'falha': t('Falha no envio'), 'grava': t('Gravando…'), 'arquivos': t('arquivos'), 'lote': t('lote'),
+  'resta': t('resta ≈'), 'nova': t('Nova tentativa automática'), 'zip': t('Arquivo ZIP'), 'analisar': t('Enviar e analisar o ZIP'),
+  'conteudo': t('Conteúdo do ZIP'), 'subpastas': t('subpastas'), 'ignorados': t('ignorados'),
+  'internos': t('ZIP internos não descompactados (mantidos como peças)'), 'analisando': t('Análise do ZIP…'),
+  'adicionar': t('Adicionar ao dossiê'), 'retomar': t('Retomar o envio')}|tojson }};
+let envioZip = null, analiseZip = null;
+function addZip(inp){
+  const z = inp.files[0]; inp.value = '';
+  if(!z) return;
+  if(envioZip) envioZip.cancelar();
+  analiseZip = null;
+  envioZip = new Envio([z], f => f.name, p => {
+    const w = document.getElementById('zip-w');
+    if(p.nova){ w.textContent = '⚠ ' + TA.nova + ' (' + p.nova + '/2)…'; return; }
+    w.textContent = '';
+    const pct = p.total ? Math.floor(p.bytes * 100 / p.total) : 100;
+    document.querySelector('#zip-prog progress').value = pct; document.getElementById('zip-p').textContent = pct + ' %';
+    document.getElementById('zip-t').textContent = envioTexto(p, TA);
+  }, 'zip');
+  document.getElementById('zip-resumo').innerHTML = '<b>' + TA.zip + ' :</b> ' + z.name.replace(/</g, '&lt;') + ' · '
+    + (z.size / 1048576).toLocaleString(undefined, {maximumFractionDigits: 1}) + ' MB';
+  ['zip-cont', 'zip-prog', 'zip-err'].forEach(id => document.getElementById(id).hidden = true);
+  const go = document.getElementById('zip-go'); go.disabled = false; go.textContent = TA.analisar;
+  document.getElementById('dlg-zip').showModal();
+}
+function addZipFechar(){
+  if(envioZip){ envioZip.cancelar(); envioZip = null; }
+  document.getElementById('dlg-zip').close();
+}
+async function addZipEnviar(ev){
+  ev.preventDefault();
+  const go = document.getElementById('zip-go'), err = document.getElementById('zip-err');
+  if(!envioZip) return false;
+  go.disabled = true; err.hidden = true; document.getElementById('zip-prog').hidden = false;
+  try {
+    if(!envioZip.pronto) await envioZip.executar();
+    if(!analiseZip){
+      document.getElementById('zip-t').textContent = TA.analisando;
+      analiseZip = await analisarZip(envioZip);
+      const c = document.getElementById('zip-cont'); c.innerHTML = zipTexto(analiseZip, TA); c.hidden = false;
+      document.getElementById('zip-prog').hidden = true;
+      go.disabled = false; go.textContent = TA.adicionar + ' (' + analiseZip.n + ')';
+      return false;
+    }
+    document.getElementById('zip-t').textContent = TA.grava;
+    const fd = new FormData(); fd.append('envio', envioZip.token);
+    const r = await fetch('/c/{{ cid }}/documentos', {method: 'POST', body: fd});
+    let j = {}; try { j = await r.json() } catch(e) {}
+    if(r.ok && j.ok){ envioZip = null; location.reload(); return false; }
+    throw new Error(j.detail || ('HTTP ' + r.status));
+  } catch(e) {
+    if(envioZip && envioZip.cancelado) return false;
+    err.textContent = TA.falha + ' : ' + e.message; err.hidden = false; go.disabled = !!e.zip_recusado;
+    if(envioZip && !envioZip.pronto) go.textContent = TA.retomar;
+  }
+  return false;
+}
+let envioAdd = null;
+async function addDocs(inp){
+  if(inp){
+    const fs = [...inp.files]; inp.value = '';
+    if(!fs.length) return;
+    if(envioAdd) envioAdd.cancelar();
+    envioAdd = new Envio(fs, f => f.webkitRelativePath || f.name, p => {
+      if(p.nova){ document.getElementById('add-w').textContent = '⚠ ' + TA.nova + ' (' + p.nova + '/2)…'; return; }
+      document.getElementById('add-w').textContent = '';
+      bar.value = p.total ? Math.floor(p.bytes * 100 / p.total) : 100;
+      tx.textContent = TA.envio + ' ' + bar.value + ' % · ' + envioTexto(p, TA);
+    });
+  }
+  if(!envioAdd) return;
+  const box = document.getElementById('add-prog'), bar = box.querySelector('progress'), tx = document.getElementById('add-t');
+  const rb = document.getElementById('add-retry');
+  box.hidden = false; rb.hidden = true;
+  try {
+    if(!envioAdd.pronto) await envioAdd.executar();
+    tx.textContent = TA.grava;
+    const fd = new FormData();
+    fd.append('envio', envioAdd.token); fd.append('n', envioAdd.pronto.n); fd.append('bytes', envioAdd.pronto.bytes);
+    const r = await fetch('/c/{{ cid }}/documentos', {method: 'POST', body: fd});
+    let j = {}; try { j = await r.json() } catch(e) {}
+    if(r.ok && j.ok){ envioAdd = null; location.reload(); return; }
+    if(r.status === 409 && /Envio/.test(j.detail || '')) envioAdd.pronto = null;
+    else if(r.status === 404){ envioAdd.token = null; envioAdd.pronto = null; }  // envoi expiré : tout sera renvoyé
+    throw new Error(j.detail || ('HTTP ' + r.status));
+  } catch(e) {
+    tx.textContent = TA.falha + ' : ' + e.message; rb.hidden = false;
+  }
+}
+</script>
+<script>
+/* Titres des matrices : un clic rétracte la matrice vers le haut sous son onglet ; un second clic la redéploie.
+   L'état est retenu pour ce navigateur (simple confort, sans effet si le stockage est indisponible). */
+(function(){
+  const lent = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cle = id => 'kyc-mx-fermee-' + id;
+  function fixer(btn, s, aberta, animar){
+    const tab = btn.closest('.mx-tab');
+    btn.setAttribute('aria-expanded', aberta); tab.classList.toggle('is-fermee', !aberta); s.inert = !aberta;
+    if (!animar || !lent) { s.classList.toggle('is-fermee', !aberta); s.style.height = aberta ? '' : '0px'; s.style.overflow = aberta ? '' : 'hidden'; return; }
+    if (aberta) {
+      s.classList.remove('is-fermee'); s.style.height = 'auto'; const h = s.offsetHeight; s.style.height = '0px';
+      void s.offsetHeight; s.style.height = h + 'px';
+      s.addEventListener('transitionend', function fim(e){ if (e.propertyName !== 'height') return;
+        s.removeEventListener('transitionend', fim); s.style.height = ''; s.style.overflow = ''; });
+    } else {
+      s.style.height = s.offsetHeight + 'px'; s.style.overflow = 'hidden'; void s.offsetHeight;
+      s.classList.add('is-fermee'); s.style.height = '0px';
+    }
+  }
+  const intro = [];  // à l'arrivée : les matrices ouvertes partent repliées puis se déplient l'une après l'autre
+  document.querySelectorAll('.mx-tab-btn').forEach(btn => {
+    const s = document.getElementById(btn.getAttribute('aria-controls'));
+    if (!s) return;
+    if (btn.dataset.sempreFechada) {
+      /* « Dernière mise à jour » : toujours repliée à l'arrivée ; l'onglet pulse tant que les remarques
+         de cette exécution n'ont pas été ouvertes dans ce navigateur. */
+      fixer(btn, s, false, false);
+      const run = btn.dataset.run, vu = run && ('kyc-info-vue-' + run);
+      let lida = !run;
+      try { if (vu) lida = localStorage.getItem(vu) === '1'; } catch(e) {}
+      if (!lida) btn.closest('.mx-tab').classList.add('is-pulse');
+      btn.addEventListener('click', () => {
+        const aberta = btn.getAttribute('aria-expanded') !== 'true';
+        fixer(btn, s, aberta, true);
+        if (aberta) { btn.closest('.mx-tab').classList.remove('is-pulse'); try { if (vu) localStorage.setItem(vu, '1'); } catch(e) {} }
+      });
+      return;
+    }
+    let fechada = false;
+    try { fechada = localStorage.getItem(cle(s.id)) === '1'; } catch(e) {}
+    if (fechada) fixer(btn, s, false, false);
+    else if (lent) { fixer(btn, s, false, false); intro.push([btn, s]); }
+    btn.addEventListener('click', () => {
+      btn.dataset.touche = '1';
+      const aberta = btn.getAttribute('aria-expanded') !== 'true';
+      fixer(btn, s, aberta, true);
+      try { aberta ? localStorage.removeItem(cle(s.id)) : localStorage.setItem(cle(s.id), '1'); } catch(e) {}
+    });
+  });
+  intro.forEach(([btn, s], i) => setTimeout(() => {
+    if (!btn.dataset.touche) fixer(btn, s, true, true);  // sauf si l'utilisateur a déjà cliqué cet onglet
+  }, 250 + i * 450));
+})();
+</script>
+{% endblock %}

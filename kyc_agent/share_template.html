@@ -1,0 +1,230 @@
+<title>__TITLE__</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: dossier header with status seal, tab rail, then one working view per tab (tables scroll inside their own frame). */
+:root{
+  --paper:#f4f6f9; --sheet:#ffffff; --ink:#18212d; --muted:#5a6676; --rule:#d6dde6; --band:#1c3554; --band-ink:#ffffff;
+  --accent:#2f5e95; --zebra:#f1f4f8; --chip:#e6edf5;
+  --crit:#a3201c; --warn:#9a5b00; --ok:#2b7a3d;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0f141b; --sheet:#161d27; --ink:#e3e9f0; --muted:#97a3b2; --rule:#2a3543; --band:#1a2f4b; --band-ink:#f2f6fb;
+  --accent:#8db5e6; --zebra:#1b2430; --chip:#223042; --crit:#e5655f; --warn:#e0a13f; --ok:#5fbf77; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0f141b; --sheet:#161d27; --ink:#e3e9f0; --muted:#97a3b2; --rule:#2a3543; --band:#1a2f4b; --band-ink:#f2f6fb;
+  --accent:#8db5e6; --zebra:#1b2430; --chip:#223042; --crit:#e5655f; --warn:#e0a13f; --ok:#5fbf77; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:14px/1.5 var(--f-body);margin:0}
+.wrap{max-width:1360px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{background:var(--band);color:var(--band-ink)}
+header .wrap{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding-block:14px}
+.case-id{font:600 12px/1 var(--f-mono);letter-spacing:.08em;opacity:.8;text-transform:uppercase}
+.case-name{font-weight:600;font-size:17px;text-wrap:balance;margin-top:4px}
+.meta{font-size:12.5px;opacity:.85;margin-top:3px}
+.seal{margin-left:auto;border:2px solid currentColor;border-radius:6px;padding:6px 12px;font:700 12.5px/1.2 var(--f-mono);letter-spacing:.04em;text-transform:uppercase;background:var(--sheet);color:var(--crit)}
+nav{background:var(--sheet);border-bottom:1px solid var(--rule);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
+nav .wrap{display:flex;gap:4px;overflow-x:auto}
+nav a{padding:12px 12px 10px;color:var(--muted);text-decoration:none;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap}
+nav a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main.wrap{padding-block:18px 40px;display:grid;gap:16px}
+section.block{background:var(--sheet);border:1px solid var(--rule);border-radius:8px;padding:16px;min-width:0}
+h2{font-size:16px;margin:0 0 10px;text-wrap:balance}
+h3{font-size:13px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+p{margin:0 0 8px;max-width:95ch}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.notice{border-left:4px solid var(--warn);background:var(--sheet);border-radius:6px;padding:10px 14px;font-size:13px;border-top:1px solid var(--rule);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--sheet);border:1px solid var(--rule);border-radius:8px;padding:10px 12px}
+.tile b{display:block;font:600 22px/1.2 var(--f-mono);font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.frame{overflow:auto;max-height:72vh;border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:12.6px}
+th{background:var(--band);color:var(--band-ink);text-align:left;padding:7px 8px;position:sticky;top:0;font-weight:600;z-index:1}
+td{border-top:1px solid var(--rule);padding:7px 8px;vertical-align:top;white-space:pre-line;min-width:90px}
+tr:nth-child(even) td{background:var(--zebra)}
+td.id,td.mono{font-family:var(--f-mono);font-size:12px;white-space:nowrap;min-width:0}
+.chip{display:inline-block;background:var(--chip);border-radius:4px;padding:1px 7px;font:500 11.5px/1.6 var(--f-mono);margin:1px 3px 1px 0}
+.chip.crit{background:var(--crit);color:var(--sheet)} .chip.warn{background:var(--warn);color:var(--sheet)} .chip.ok{background:var(--ok);color:var(--sheet)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spread{justify-content:space-between}
+button,.btn{font:600 13px var(--f-body);padding:6px 12px;border-radius:6px;border:1px solid var(--rule);background:var(--chip);color:var(--ink);cursor:pointer}
+input[type=search]{font:inherit;padding:7px 10px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);color:var(--ink);width:min(420px,100%)}
+pre.msg{white-space:pre-wrap;font:13.5px/1.55 var(--f-body);background:var(--zebra);border-radius:6px;padding:12px 14px;margin:8px 0;max-width:100ch}
+.sheetnav{display:flex;flex-wrap:wrap;gap:6px}
+.sheetnav button[aria-pressed="true"]{background:var(--band);color:var(--band-ink);border-color:var(--band)}
+details summary{cursor:pointer;font-weight:600}
+.nota h2{margin-top:14px}.nota li{margin:3px 0}
+/* Onglet Tarefas : orange vif ; blanc sur #c2410c = contraste 5.2:1 */
+:root{--todo:#c2410c;--todo2:#ea580c;--todo-bg:#fff1e6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--todo-bg:#2b1a0e}}
+:root[data-theme="dark"]{--todo-bg:#2b1a0e}
+nav a.tab-todo{background:var(--todo);color:#fff;border-radius:8px 8px 0 0;margin-top:6px;padding:8px 14px}
+nav a.tab-todo[aria-current="page"]{background:var(--todo2);color:#fff;border-bottom-color:var(--todo)}
+nav a.tab-todo .badge{background:#fff;color:var(--todo);border-radius:10px;padding:0 7px;font-size:12px;margin-left:4px}
+.todo-hero{background:linear-gradient(120deg,var(--todo),var(--todo2));color:#fff;border-radius:10px;padding:16px 18px;display:flex;flex-wrap:wrap;gap:8px 24px;align-items:end}
+.todo-k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.9}.todo-n{font:700 26px/1.2 var(--f-mono)}.todo-sub{font-size:12.5px;opacity:.92}
+.todo-group{border-left:5px solid var(--todo2)}
+.todo{display:flex;gap:12px;padding:10px 2px;border-top:1px solid var(--rule)}
+.todo input{width:20px;height:20px;margin-top:2px;accent-color:var(--todo);flex:none}
+.todo-t{font-weight:600;cursor:pointer}.todo-d{white-space:pre-line;font-size:13px;margin-top:3px}
+.todo-r{font-size:13px;margin-top:5px;background:var(--todo-bg);border-radius:6px;padding:4px 8px}
+.todo.done .todo-t,.todo.done .todo-d{text-decoration:line-through;opacity:.55}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:10px 16px 28px}
+@media (max-width:640px){.seal{margin-left:0}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+
+<header><div class="wrap">
+  <div style="min-width:0">
+    <div class="case-id" id="h-id"></div>
+    <div class="case-name" id="h-name"></div>
+    <div class="meta" id="h-meta"></div>
+  </div>
+  <div class="seal" id="h-status"></div>
+</div></header>
+<nav aria-label="Seções"><div class="wrap" id="tabs"></div></nav>
+<main class="wrap" id="view"></main>
+<footer>Rascunho preparado por agente de IA — recomendação sujeita a revisão e autorização humanas. Confidencial – uso interno. CPF, RG, conta bancária e telefone mascarados nesta versão partilhável; nenhum documento do cliente incluído.</footer>
+
+<script>
+const D = /*__DATA__*/null;
+const S = D.state;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const T = (cab, rows, opt={}) => `<div class="frame"${opt.id?` id="${opt.id}"`:""}><table><thead><tr>${cab.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
+  rows.map(r=>`<tr>${r.map((c,i)=>`<td${(opt.mono||[]).includes(i)?' class="mono"':''}>${typeof c==="object"&&c&&c.html!==undefined?c.html:esc(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+const H = html => ({html});
+const TABS = [["tarefas","Tarefas"],["relatorio","Relatório"],["matriz","Matriz"],["mensagens","Mensagens e anexos"],["provas","Provas"],["nota","Note FR"]];
+
+document.getElementById("h-id").textContent = `${S.caso.id} · versão ${S.versao}`;
+document.getElementById("h-name").textContent = S.caso.nome;
+document.getElementById("h-meta").textContent = `Data de referência ${S.data_referencia||S.data_analise} · BDR ${S.caso.bdr.nome} · ${S.caso.categoria}`;
+document.getElementById("h-status").textContent = S.recomendacao.status;
+
+function filter(inp, scope){const q=inp.value.toLowerCase();document.querySelectorAll(scope+" tbody tr").forEach(r=>{r.hidden=!r.textContent.toLowerCase().includes(q)})}
+async function copy(id, btn){
+  const el=document.getElementById(id);
+  try{await navigator.clipboard.writeText(el.innerText);btn.textContent="Copiado";}
+  catch(e){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent="Texto selecionado — Ctrl+C";}
+  setTimeout(()=>btn.textContent="Copiar texto",2200);
+}
+
+function relatorio(){
+  const r=S.recomendacao, pend=S.pendencias;
+  const tiles=[["Pendências que condicionam o KYC",pend.filter(p=>p.condiciona==="KYC").length],["Pontos de due diligence",pend.filter(p=>p.condiciona==="DD").length],
+    ["Riscos que bloqueiam o KYC",`${S.riscos.filter(x=>x.bloqueia_kyc).length} / ${S.riscos.length}`],["Partes registradas",S.partes.length],["Acessos bloqueados",(S.registro_tecnico||[]).length]];
+  const grp=(t,f)=>{const rows=pend.filter(f).map(p=>[H(`<span class="chip">${esc(p.id)}</span><span class="chip ${p.prioridade==="P1"?"crit":p.prioridade==="P2"?"warn":""}">${esc(p.prioridade)}</span>`),p.item,p.esperado,p.criterio_fechamento,`${p.responsavel}\n${p.etapa_limite}`]);
+    return rows.length?`<h3>${t}</h3>`+T(["#","Item","Complemento esperado","Critério de fechamento","Responsável / etapa"],rows):""};
+  const er=S.execucao_revisao||{};
+  return `
+  <div class="tiles">${tiles.map(([l,n])=>`<div class="tile"><b>${esc(n)}</b><span>${esc(l)}</span></div>`).join("")}</div>
+  <section class="block"><h2>1.1 Síntese</h2><p>${esc(r.resumo)}</p>
+    <h3>Fundamentação</h3><ul>${r.justificativa.map(j=>`<li>${esc(j)}</li>`).join("")}</ul>
+    <p><b>Caminho para conclusão.</b> ${esc(r.caminho_para_validacao)}</p><p><b>Escalonamento.</b> ${esc(r.escalonamento)}</p>
+    <p class="small muted">${esc(S.guia_referencia||"")}</p></section>
+  <section class="block"><h2>1.2 Partes</h2>${T(["Parte","Identificação","Papéis","Fonte do vínculo","Tratamento KYC"],
+    S.partes.map(p=>[H(`<b>${esc(p.id)}</b> ${esc(p.nome)}`),`${p.tipo} · ${p.cpf}`,p.papeis.join("\n"),p.vinculo_fonte||"",p.kyc]))}</section>
+  <section class="block"><div class="row spread"><h2>1.3 Controles</h2><input type="search" id="f-ctl" placeholder="Filtrar controles" oninput="filter(this,'#t-ctl')"></div>
+    ${T(["#","Nível","Controle","Partes","Estado","Execução","Resultado → conclusão","Evid."],
+    S.controles.map(k=>[k.id,k.nivel||"",k.controle,k.partes||"",k.estado||"",k.execucao,`${k.resultado}\n→ ${k.conclusao||""}`,k.evidencias.join(", ")]),{id:"t-ctl",mono:[0]})}</section>
+  <section class="block"><h2>1.4 Fluxos financeiros</h2>${T(["#","Pagador","Recebedor","Valor","Motivo","Base contratual","Natureza"],
+    S.fluxos.map(f=>[f.id,f.pagador,f.recebedor,f.valor,f.motivo,f.base_contratual,f.natureza]),{mono:[0]})}</section>
+  <section class="block"><h2>1.5 Pontos já esclarecidos</h2>${T(["#","Ponto","Conclusão","Natureza","Evid."],
+    S.pontos_esclarecidos.map(x=>[x.id,x.ponto,x.conclusao,x.natureza,x.evidencias.join(", ")]),{mono:[0]})}</section>
+  <section class="block"><h2>1.6 Riscos que subsistem</h2>${T(["#","Risco","Fato / fonte","Medidas","Residual"],
+    S.riscos.map(x=>[H(`<span class="chip">${esc(x.id)}</span><br><span class="chip ${x.importancia==="alta"?"crit":x.importancia==="média"?"warn":""}">${esc(x.importancia)}</span><br><span class="small">${x.bloqueia_kyc?"bloqueia o KYC":"não bloqueia"}</span>`),
+    `${x.titulo}\nEvento: ${x.evento||""}\nParte/fluxo: ${x.parte_fluxo||""}`,x.fato_fonte||x.descricao,`Executado: ${x.medida_executada||""}\nProposto: ${x.medida_proposta||""}`,x.risco_residual||""]))}</section>
+  <section class="block"><h2>1.7 O que ainda deve ser recebido</h2>
+    ${grp("Condiciona o KYC — cliente / BDR",p=>p.condiciona==="KYC"&&["Cliente (via BDR)","BDR"].includes(p.responsavel))}
+    ${grp("Condiciona o KYC — Jurídico",p=>p.condiciona==="KYC"&&p.responsavel==="Jurídico")}
+    ${grp("Condiciona o KYC — decisão do CEO",p=>p.condiciona==="KYC"&&p.responsavel==="CEO")}
+    ${grp("Due diligence (posterior)",p=>p.condiciona==="DD")}
+    ${S.condicoes?`<h3>Condições</h3>`+T(["Tipo","Condições"],[["Já cumpridas",S.condicoes.ja_cumpridas.join("\n")],["Necessárias ao KYC",S.condicoes.necessarias_ao_kyc.join("\n")],["Antes de assinatura / closing",S.condicoes.antes_assinatura_closing.join("\n")]]):""}</section>
+  ${(S.registro_tecnico||[]).length?`<section class="block"><h2>Ações humanas — registro técnico (interno)</h2>
+    <p class="small muted">Verificações que o agente não pôde executar (captcha não contornado, base não fornecida, portal inacessível). Não são pedidos externos: cabe ao Compliance executá-las e devolver o resultado ao agente.</p>
+    ${T(["#","Controle","Motivo","O que fazer","A devolver ao agente","Impacto"],S.registro_tecnico.map(t=>[
+      H(`<span class="chip">${esc(t.id)}</span><span class="chip ${t.prioridade==="P1"?"crit":t.prioridade==="P2"?"warn":""}">${esc(t.prioridade)}</span>${t.acao_humana?'<br><span class="small">ação Compliance</span>':""}`),
+      t.controle,t.incidente,H(esc(t.intervencao)+(t.link?`<br><a href="${esc(t.link)}" target="_blank" rel="noopener">Abrir o site</a>`:"")),t.retorno_esperado||"",t.impacto]))}</section>`:""}
+  <section class="block" id="revisao"><h2>1.8 Revisão e autorização</h2>${T(["Etapa","Identidade","Data"],[["Execução",er.executado_por||"—",S.data_analise],["Revisão",er.revisado_por||"pendente",er.data_revisao||"—"],["Autorização",er.autorizado_por||"pendente",er.data_autorizacao||"—"]])}
+    <p class="small muted" style="margin-top:8px">${esc(er.nota||"")}</p></section>
+  <section class="block"><h2>Journal de versões</h2>${S.historico.slice().reverse().map((h,i)=>`<details ${i===0?"open":""}><summary>Versão ${esc(h.versao)} — ${esc(h.data)} — ${esc(h.evento)}</summary><ul>${h.mudancas.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></details>`).join("")}</section>`;
+}
+
+function tarefasView(){
+  const tot=D.tarefas.reduce((n,g)=>n+g.itens.length,0);
+  return `<div class="todo-hero"><div><div class="todo-k">Tarefas em curso</div><div class="todo-n"><span id="todo-left">${tot}</span> / ${tot} a fazer</div></div>
+    <div class="todo-sub">Marcar como feito fica só neste navegador (lembrete pessoal) — não altera o dossiê.</div></div>`+
+  D.tarefas.map((g,gi)=>`<section class="block todo-group"><h2>${gi+1}. ${esc(g.titulo)} <span class="muted small">(${g.itens.length})</span></h2>
+    ${g.intro?`<p class="small muted">${esc(g.intro)}</p>`:""}
+    ${g.itens.map(t=>`<div class="todo" data-k="${esc(S.caso.id)}-v${D.versao}-${esc(t.id)}"><input type="checkbox" id="cb-${esc(t.id)}" aria-label="Feito: ${esc(t.titulo)}">
+      <div><label for="cb-${esc(t.id)}" class="todo-t"><span class="chip ${t.prioridade==="P1"?"crit":t.prioridade==="P2"?"warn":""}">${esc(t.prioridade)}</span> ${esc(t.titulo)}</label>
+      <div class="todo-d">${esc(t.detalhe)}</div>${t.retorno?`<div class="todo-r"><b>A devolver:</b> ${esc(t.retorno)}</div>`:""}
+      <div class="row small" style="margin-top:4px"><span class="muted">${esc(t.quem)}</span>${(t.chips||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join("")}
+      ${t.aba?`<a href="#${t.aba}:${t.aba==="mensagens"?"msg-"+esc(t.alvo):esc(t.alvo)}">${t.aba==="mensagens"?"Abrir a mensagem":"Abrir o relatório"}</a>`:""}
+      ${t.link?`<a href="${esc(t.link)}" target="_blank" rel="noopener">Abrir o site ↗</a>`:""}</div></div></div>`).join("")}</section>`).join("");
+}
+function initTodo(){
+  const items=[...document.querySelectorAll(".todo")];
+  const upd=()=>{document.getElementById("todo-left").textContent=items.filter(i=>!i.querySelector("input").checked).length};
+  items.forEach(i=>{const cb=i.querySelector("input");
+    try{cb.checked=localStorage.getItem("todo:"+i.dataset.k)==="1"}catch(e){}
+    i.classList.toggle("done",cb.checked);
+    cb.addEventListener("change",()=>{i.classList.toggle("done",cb.checked);try{localStorage.setItem("todo:"+i.dataset.k,cb.checked?"1":"0")}catch(e){}upd()})});
+  upd();
+}
+
+let curSheet=0;
+function matriz(){
+  const sh=D.sheets[curSheet];
+  return `<section class="block"><h2>Matriz operacional</h2>
+    <p class="small muted">Conteúdo do arquivo ${esc(S.caso.id)}_Matriz_v${D.versao}.xlsx. A aba «Matriz» contém só as dependências externas; os acessos bloqueados estão no «Registro_tecnico».</p>
+    <div class="sheetnav" role="group" aria-label="Abas da matriz">${D.sheets.map((s,i)=>`<button id="sh-${i}" aria-pressed="${i===curSheet}" onclick="curSheet=${i};render()">${esc(s.nome)} (${s.linhas.length})</button>`).join("")}</div></section>
+  <section class="block"><div class="row spread"><h2>${esc(sh.nome)}</h2><input type="search" id="f-sheet" placeholder="Filtrar linhas" oninput="filter(this,'#t-sheet')"></div>
+    ${T(sh.cab, sh.linhas, {id:"t-sheet"})}</section>`;
+}
+
+function mensagens(){
+  const idx=D.indice;
+  return `<div class="notice"><b>Rascunhos para revisão.</b> Nada é enviado a partir desta página. Compliance relê, ajusta e envia pelo canal autorizado. Os anexos ficam no pacote de provas interno (não incluído nesta versão partilhável).</div>` +
+  S.mensagens.map(m=>{
+    const anexos=m.anexos.map(a=>{const ids=a.match(/\bE\d{2}\b/g)||[];const files=ids.flatMap(e=>idx.filter(r=>r.id===e||r.id.startsWith(e+".")).map(r=>r.arquivo_no_zip.split("/").slice(1).join("/")));
+      return [a, files.length?files.join("\n"):(/\bM\d\b/.test(a)?"ver a mensagem indicada":"a juntar manualmente — não disponível no dossiê")]});
+    return `<section class="block" id="msg-${esc(m.id)}"><div class="row spread"><h2>${esc(m.id)} — ${esc(m.destinatario)}</h2><button id="cp-${esc(m.id)}" onclick="copy('body-${esc(m.id)}',this)">Copiar texto</button></div>
+      <p class="small"><b>Para:</b> ${esc(m.para)}<br><b>Assunto:</b> ${esc(m.assunto)}<br><b>Pendências cobertas:</b> ${m.pendencias.map(p=>`<span class="chip">${esc(p)}</span>`).join("")}</p>
+      <pre class="msg" id="body-${esc(m.id)}">${esc(m.corpo)}</pre><h3>Anexos</h3>${T(["Anexo previsto","Arquivo no pacote de provas"],anexos)}</section>`}).join("");
+}
+
+function provas(){
+  const pastas={}; D.indice.forEach(r=>{(pastas[r.pasta||r.categoria]??=[]).push(r)});
+  return `<section class="block"><div class="row spread"><h2>Pacote de provas — índice</h2><input type="search" id="f-prov" placeholder="Filtrar por nome, pasta, ID" oninput="filter(this,'#provas-all')"></div>
+    <p class="small muted">${D.indice.length} arquivos no ZIP ${esc(S.caso.id)}_Evidencias_v${D.versao}.zip (${D.zip_mb} MB), com origem, descrição, seção sustentada e SHA-256. Os arquivos ficam no espaço interno de Compliance; esta página mostra apenas o índice.</p></section>
+  <div id="provas-all" style="display:grid;gap:16px">${Object.entries(pastas).map(([p,rows])=>`<section class="block"><h2>${esc(p)} <span class="muted small">(${rows.length})</span></h2>
+    ${T(["ID","Arquivo","Origem","Descrição","Sustenta","Tamanho","SHA-256"],rows.map(r=>[r.id,r.arquivo_no_zip.split("/").pop(),r.origem,r.descricao,r.sustenta,`${Math.round(r.tamanho/1024)} KB`,H(`<span title="${esc(r.sha256)}">${esc(r.sha256.slice(0,12))}…</span>`)]),{mono:[0,5,6]})}</section>`).join("")}</div>`;
+}
+
+function nota(){
+  let html="",ul=false;
+  D.nota.split("\n").forEach(l=>{let s=esc(l).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");
+    if(l.startsWith("- ")){if(!ul){html+="<ul>";ul=true}html+=`<li>${s.slice(2)}</li>`;return}
+    if(ul){html+="</ul>";ul=false}
+    const m=l.match(/^(#{1,3}) /); if(m){html+=`<h2>${s.replace(/^#+ /,"")}</h2>`} else if(l.trim()) html+=`<p>${s}</p>`});
+  if(ul)html+="</ul>";
+  return `<section class="block nota" lang="fr">${html}</section>`;
+}
+
+const VIEWS={tarefas:tarefasView,relatorio,matriz,mensagens,provas,nota};
+function render(){
+  const [k,alvo]=(location.hash||"#tarefas").slice(1).split(":"), key=VIEWS[k]?k:"tarefas";
+  const ntar=D.tarefas.reduce((n,g)=>n+g.itens.length,0);
+  document.getElementById("tabs").innerHTML=TABS.map(([id,l])=>`<a href="#${id}" class="${id==="tarefas"?"tab-todo":""}" ${id===key?'aria-current="page"':""}>${l}${id==="tarefas"?` <span class="badge">${ntar}</span>`:""}</a>`).join("");
+  document.getElementById("view").innerHTML=VIEWS[key]();
+  if(key==="tarefas")initTodo();
+  const el=alvo&&document.getElementById(alvo);
+  el?el.scrollIntoView({block:"start"}):scrollTo(0,0);
+}
+addEventListener("hashchange",render);
+render();
+</script>

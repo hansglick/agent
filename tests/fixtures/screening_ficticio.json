@@ -1,0 +1,133 @@
+{
+ "executado_em": "2026-11-11T16:13:14+00:00",
+ "fontes": {
+  "OFAC": {
+   "arquivos": {
+    "ofac_sdn.csv": "7f43332dae0d1b78ce44c31692d87a3c66e4075bcd97e36d3f18585572ff55b8",
+    "ofac_alt.csv": "b228a6761aad6f666386202419d97caa1fc75529c9708d937d5e8febb067fd9d",
+    "ofac_cons_prim.csv": "4fe4f7faf8c5c329bb9f7cd5e145794aa267b21ec2ee5df82bacdd1d60a20545",
+    "ofac_cons_alt.csv": "106ba0e33579c5d20693e414ad66a9145329f1db012a18c3bdc8f84491a32b81"
+   },
+   "url": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/",
+   "registros": 41396,
+   "cobertura": "SDN + Consolidated (non-SDN): nomes primários e aliases"
+  },
+  "ONU": {
+   "arquivos": {
+    "un_consolidated.xml": "a3561ec4338dc55b35e5a6c4a864fede46c730424349d74270e9f7cf546cf044"
+   },
+   "data_geracao_lista": "2026-11-11T00:00:03.543Z",
+   "url": "https://scsanctions.un.org/resources/xml/en/consolidated.xml",
+   "registros": 3157,
+   "cobertura": "Lista consolidada do CSNU: indivíduos, entidades e aliases"
+  },
+  "PEP": {
+   "arquivos": {
+    "202609_PEP.csv": "b0d1f012af115bd383788139c52a8624b2fe64b1cd5bf49088170ddf9d20e774"
+   },
+   "competencia": "202609",
+   "url": "https://portaldatransparencia.gov.br/download-de-dados/pep",
+   "registros": 133875,
+   "cobertura": "PEP brasileiras (CGU); não cobre PEP estrangeiras nem familiares/estreitos colaboradores"
+  },
+  "CEIS": {
+   "arquivos": {
+    "20261110_CEIS.csv": "a9a4d0440f76f7fa21435811fd6c9372aab36510c0b34b7d2aae6287d0f9ccfb"
+   },
+   "data_arquivo": "20261110",
+   "url": "https://portaldatransparencia.gov.br/download-de-dados/ceis",
+   "registros": 23712,
+   "cobertura": "PF e PJ"
+  },
+  "CNEP": {
+   "arquivos": {
+    "20261110_CNEP.csv": "035f5ef38e8e9921ca598c82eb58029fce0d24486579bf24d10ec032ed36b317"
+   },
+   "data_arquivo": "20261110",
+   "url": "https://portaldatransparencia.gov.br/download-de-dados/cnep",
+   "registros": 1848,
+   "cobertura": "PJ (Lei 12.846/2013)"
+  }
+ },
+ "limiar_similaridade": 0.88,
+ "metodo": "Similaridade token-set (difflib) sobre nomes normalizados (sem acentos/partículas), limiar fixo 0.88 definido antes da execução; pré-filtro ≥ 2 tokens comuns; correspondência exata de CPF/CNPJ quando a lista o contém (CEIS/CNEP integral; PEP com 6 dígitos centrais). Candidatos conservados e resolvidos individualmente por identificadores (guia v2 §§7.1-7.4).",
+ "resultados": [
+  {
+   "id": "FUL",
+   "nome": "FULANO EXEMPLO",
+   "variantes": [],
+   "tipo": "PF",
+   "cpf": "52998224725",
+   "cnpj": "",
+   "cpf_digito_valido": true,
+   "motivo": "contraparte (teste)",
+   "executado_em": "2026-11-11T16:13:14+00:00",
+   "listas": {
+    "OFAC": {
+     "termo_pesquisado": "FULANO EXEMPLO",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "ONU": {
+     "termo_pesquisado": "FULANO EXEMPLO",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "PEP": {
+     "termo_pesquisado": "FULANO EXEMPLO / CPF centro 982247",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "CEIS": {
+     "termo_pesquisado": "FULANO EXEMPLO / CPF 52998224725",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "CNEP": {
+     "termo_pesquisado": "FULANO EXEMPLO / CPF 52998224725",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    }
+   }
+  },
+  {
+   "id": "EMP",
+   "nome": "EMPRESA EXEMPLO LTDA",
+   "variantes": [],
+   "tipo": "PJ",
+   "cpf": "",
+   "cnpj": "11222333000181",
+   "cpf_digito_valido": null,
+   "motivo": "compradora (teste)",
+   "executado_em": "2026-11-11T16:13:14+00:00",
+   "listas": {
+    "OFAC": {
+     "termo_pesquisado": "EMPRESA EXEMPLO LTDA",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "ONU": {
+     "termo_pesquisado": "EMPRESA EXEMPLO LTDA",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "PEP": {
+     "termo_pesquisado": "—",
+     "resultado": "não aplicável (pessoa jurídica)",
+     "candidatos": []
+    },
+    "CEIS": {
+     "termo_pesquisado": "EMPRESA EXEMPLO LTDA / CNPJ 11222333000181",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    },
+    "CNEP": {
+     "termo_pesquisado": "EMPRESA EXEMPLO LTDA / CNPJ 11222333000181",
+     "candidatos": [],
+     "resultado": "nenhuma correspondência identificada"
+    }
+   }
+  }
+ ],
+ "_aviso": "Fixture fictícia para testes (screening real executado sobre nomes fictícios, renomeados)."
+}
