@@ -9,7 +9,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONUTF8=1 \
 
 WORKDIR /app
 COPY requirements.txt requirements-web.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -r requirements-web.txt \
+# libatomic1 : requis par le Node.js embarqué de Playwright (absent de l'image slim)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libatomic1 ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --root-user-action=ignore --no-cache-dir -r requirements.txt -r requirements-web.txt \
  && python -m playwright install --with-deps chromium-headless-shell \
  && rm -rf /var/lib/apt/lists/*
 
