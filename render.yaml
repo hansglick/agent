@@ -7,7 +7,8 @@ services:
     plan: standard
     numInstances: 1
     healthCheckPath: /healthz
-    autoDeploy: false        # un déploiement redémarre le service et interrompt une mise à jour en cours : déployer à la main
+    autoDeploy: true         # déploiement à chaque push sur main. Il redémarre le service : une mise à jour de dossier en cours
+                             # est interrompue (dossier remis en état, « Reprendre » proposé) — éviter de pousser pendant un run
     envVars:
       - key: DATA_DIR
         value: /data
