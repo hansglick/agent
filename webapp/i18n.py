@@ -206,7 +206,7 @@ UI_FR = {
     "Custo acumulado dos tokens consumidos pelo agente neste dossiê (equivalente API, US$).":
         "Coût cumulé des tokens consommés par l'agent sur ce dossier (équivalent API, $).",
     "Criado há": "Créé il y a",
-    "Atualizar o dossiê": "Mettre à jour le dossier", "documentos aguardando tratamento": "documents en attente de traitement",
+    "Atualizar o dossiê": "Mettre à jour le dossier", "Lançar a primeira fase": "Lancez la première phase", "documentos aguardando tratamento": "documents en attente de traitement",
     "Peças do dossiê": "Pièces du dossier", "documentos": "documents", "Adicionar peças ao dossiê": "Ajouter des pièces au dossier",
     "Documentos aguardados pelo agente": "Documents attendus par l'agent", "verificações": "vérifications",
     "respostas a mensagens": "réponses aux messages", "Respostas a mensagens": "Réponses aux messages",

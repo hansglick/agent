@@ -66,6 +66,8 @@
   {% if pedido._dir and pedido.estado != 'solicitado' %}<div style="margin-top:4px">{% if ps.duracao_s is defined and ps.duracao_s is not none %}{{ t('Duração do trabalho do agente') }} : {{ fmt_crono(ps.duracao_s) }} · {% endif %}<a href="/c/{{ cid }}/journal?run={{ pedido._dir|urlencode }}">{{ t('Diário completo do agente') }} →</a></div>{% endif %}
 </section>{% endif %}
 {% set TRATADO = status_dossie == 'tratado' %}
+{# première analyse (aucune version) : « Lancer la première phase » au lieu de « Mettre à jour le dossier » #}
+{% set ROT_RUN = t('Lançar a primeira fase') if not vs else t('Atualizar o dossiê') %}
 {% if TRATADO %}<div class="card pedido pedido-concluido small" role="status">
   <b>{{ t('Dossiê concluído') }}</b> — {{ t('validado por') }} {{ meta.tratado_por }} · {{ fmt_data(meta.tratado_em) }}.
   {{ t('Para atualizá-lo ou retomar a análise, reabra o dossiê.') }}
@@ -89,7 +91,7 @@
           <button class="mx-cta" type="button" id="btn-atualizar" onclick="document.getElementById('dlg-retomar').showModal()">{{ t('Retomar a atualização') }}</button>
           {% else %}
           <button class="mx-cta" type="button" id="btn-atualizar" {% if PODE %}onclick="document.getElementById('dlg-agent').showModal()"{% else %}disabled{% endif %}
-            aria-label="{{ t('Atualizar o dossiê') }} — {{ P.total }} {{ t('documentos aguardando tratamento') }}">{{ t('Atualizar o dossiê') }}</button>
+            aria-label="{{ ROT_RUN }} — {{ P.total }} {{ t('documentos aguardando tratamento') }}">{{ ROT_RUN }}</button>
           {% endif %}
           {% if P.total %}<span class="cta-badge cta-n" id="cta-n" tabindex="0" role="img" aria-label="{{ P.total }} {{ t('documentos aguardando tratamento') }}" data-tip="{{ P.total }} {{ t('documentos aguardando tratamento') }}">{{ P.total }}</span>{% endif %}
           {% if requete %}<button class="cta-badge cta-r" type="button" id="cta-r" onclick="document.getElementById('dlg-requete-ver').showModal()"
@@ -232,7 +234,7 @@
 {# fenêtre (1) : ce que l'agent traitera #}
 <dialog id="dlg-agent" class="dlg dlg-dark dlg-run" aria-labelledby="ag-h">
   <form method="post" action="/c/{{ cid }}/atualizar">
-    <h2 id="ag-h" style="margin-top:0">{{ t('Atualizar o dossiê') }}</h2>
+    <h2 id="ag-h" style="margin-top:0">{{ ROT_RUN }}</h2>
     <p class="small" style="margin-top:0;color:#c8c8c8">{{ P.total }} {{ t('documentos aguardando tratamento') }}
       ({{ P.n_docs }} {{ t('peças') }} · {{ P.n_ver }} {{ t('verificações') }} · {{ P.n_msg }} {{ t('mensagens') }})</p>
     {% if requete %}<p class="small" style="color:#c8c8c8;margin:6px 0 0"><b style="color:#22c55e">R</b> {{ t('Requisição de atualização') }} :

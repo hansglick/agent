@@ -143,5 +143,7 @@ def test_onglets_grises_avant_la_premiere_analyse(cli):
     page = cli.get("/c/NOVO-1/painel").text
     assert page.count('class="tab-off"') == 5 and "Disponible après la première analyse" in page
     assert 'href="/c/NOVO-1/matriz"' not in page
-    # après la première analyse : onglets actifs
-    assert 'class="tab-off"' not in cli.get("/c/EX-001/v1/painel").text
+    assert "Lancez la première phase" in page and "Mettre à jour le dossier" not in page  # bouton et fenêtre de lancement
+    # après la première analyse : onglets actifs, bouton « Mettre à jour le dossier »
+    v1 = cli.get("/c/EX-001/v1/painel").text
+    assert 'class="tab-off"' not in v1 and "Mettre à jour le dossier" in v1 and "Lancez la première phase" not in v1
